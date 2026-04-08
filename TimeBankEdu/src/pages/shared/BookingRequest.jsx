@@ -1,0 +1,116 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Shield, Clock, Calendar, User, BookOpen } from 'lucide-react';
+import DashboardLayout from '../../components/layout/DashboardLayout';
+import Avatar from '../../components/common/Avatar';
+
+export default function BookingRequest() {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ tutor: 'Ahmed Moussa', module: 'Algorithme - L2', duration: '2 heures', date: '15/05/2024', slot: '10h - 12h', message: '' });
+  const [charCount, setCharCount] = useState(0);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    navigate('/student/demandes');
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-bold text-gray-900">Nouvelle Demande de Tutorat</h1>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-4xl">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="card space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Tuteur</label>
+              <select value={form.tutor} onChange={e => setForm({...form, tutor: e.target.value})} className="input-field">
+                <option>Ahmed Moussa</option>
+                <option>Lina Farah</option>
+                <option>Yassine K.</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Module</label>
+              <select value={form.module} onChange={e => setForm({...form, module: e.target.value})} className="input-field">
+                <option>Algorithme - L2</option>
+                <option>Python - L2</option>
+                <option>Base de Données - L3</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Durée</label>
+              <select value={form.duration} onChange={e => setForm({...form, duration: e.target.value})} className="input-field">
+                <option>1 heure</option>
+                <option>2 heures</option>
+                <option>3 heures</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Date</label>
+              <input type="text" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="input-field" placeholder="JJ/MM/AAAA" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Créneau</label>
+              <select value={form.slot} onChange={e => setForm({...form, slot: e.target.value})} className="input-field">
+                <option>10h - 12h</option>
+                <option>14h - 16h</option>
+                <option>18h - 20h</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Message (optionnel)</label>
+              <textarea rows={3} placeholder="Je suis intéressé par ce créneau pour travailler les algorithmes de tri."
+                value={form.message} onChange={e => { setForm({...form, message: e.target.value}); setCharCount(e.target.value.length); }}
+                maxLength={200} className="input-field resize-none" />
+              <p className="text-xs text-gray-400 text-right mt-1">{charCount}/200</p>
+            </div>
+          </div>
+
+          <div className="bg-primary-50 border border-primary-100 rounded-xl p-3 flex items-start gap-3">
+            <Shield size={16} className="text-primary-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-primary-700">Votre demande sera envoyée au tuteur. Vous serez notifié de sa réponse.</p>
+          </div>
+
+          <button type="submit" className="btn-primary w-full py-3">
+            Envoyer la Demande
+          </button>
+        </form>
+
+        {/* Summary */}
+        <div className="card h-fit">
+          <h3 className="font-semibold text-gray-900 mb-4">Récapitulatif</h3>
+          <div className="space-y-3">
+            {[
+              { icon: User, label: 'Tuteur', val: form.tutor, color: 'bg-primary-100 text-primary-600' },
+              { icon: BookOpen, label: 'Module', val: form.module, color: 'bg-blue-100 text-blue-600' },
+              { icon: Calendar, label: 'Créneau', val: `${form.date} à ${form.slot.split(' - ')[0]}`, color: 'bg-purple-100 text-purple-600' },
+              { icon: Clock, label: 'Durée', val: form.duration, color: 'bg-orange-100 text-orange-600' },
+            ].map(({ icon: Icon, label, val, color }) => (
+              <div key={label} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <div className={`w-9 h-9 ${color} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                  <Icon size={16} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">{label}</p>
+                  <p className="text-sm font-semibold text-gray-800">{val}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl">
+            <p className="text-xs text-yellow-700 font-medium">⚠️ Solde requis</p>
+            <p className="text-xs text-yellow-600 mt-1">2 heures seront déduites de votre balance après confirmation.</p>
+            <p className="text-xs text-yellow-600">Balance actuelle : <strong>3h disponibles</strong></p>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
