@@ -4,7 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
-import { useApp, mockRequests } from '../../context/AppContext';
+import { useApp } from '../../context/AppContext';
 
 const chartData = [
   { month: 'Fév', tutorats: 3, heures: 5 }, { month: 'Mar', tutorats: 5, heures: 8 },
@@ -18,8 +18,17 @@ const planningItems = [
 ];
 
 export default function TutorDashboard() {
-  const { currentUser } = useApp();
+  const { currentUser, reservations, updateReservationStatus, displayBalance } = useApp();
   const navigate = useNavigate();
+
+  const recentIncoming = [...reservations]
+    .filter((r) => r.tutorId === currentUser?.id)
+    .sort((a, b) => {
+      const w = (s) => (s === 'pending' ? 0 : s === 'confirmed' ? 1 : 2);
+      if (w(a.status) !== w(b.status)) return w(a.status) - w(b.status);
+      return b.id - a.id;
+    })
+    .slice(0, 4);
 
   return (
     <DashboardLayout>
@@ -35,7 +44,9 @@ export default function TutorDashboard() {
             <Clock size={16} className="text-primary-600" />
             <span className="text-xs text-gray-500">Heures gagnées</span>
           </div>
-          <div className="text-2xl font-bold text-primary-700">{currentUser?.balance || 8}h</div>
+          <div className="text-2xl font-bold text-primary-700">
+            {displayBalance != null ? displayBalance : currentUser?.balance ?? 0}h
+          </div>
           <p className="text-xs text-green-600 mt-1">+2h cette semaine</p>
         </div>
         <div className="card bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
@@ -60,23 +71,52 @@ export default function TutorDashboard() {
         {/* Recent Requests */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">Demandes Récentes</h2>
+            <h2 className="font-semibold text-gray-900">Réservations récentes</h2>
             <button onClick={() => navigate('/tutor/demandes')} className="text-xs text-primary-600 hover:underline flex items-center gap-1">Voir tout <ChevronRight size={14} /></button>
           </div>
           <div className="space-y-3">
-            {mockRequests.map(req => (
+            {recentIncoming.length === 0 && (
+              <p className="text-sm text-gray-400 py-4 text-center">Aucune demande pour le moment.</p>
+            )}
+            {recentIncoming.map((req) => (
               <div key={req.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                <Avatar initials={req.from.split(' ').map(w=>w[0]).join('')} size="sm" />
+                <Avatar
+                  initials={req.studentName
+                    .split(/\s+/)
+                    .map((w) => w[0])
+                    .join('')}
+                  size="sm"
+                />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{req.from}</p>
-                  <p className="text-xs text-gray-500">{req.module} • {req.duration}h</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{req.studentName}</p>
+                  <p className="text-xs text-gray-500">
+                    {req.module} • {req.creneauLabel} • {req.duration}h
+                  </p>
                 </div>
                 {req.status === 'pending' ? (
                   <div className="flex gap-1">
-                    <button className="w-7 h-7 bg-primary-600 text-white rounded-full flex items-center justify-center hover:bg-primary-700"><Check size={13} /></button>
-                    <button className="w-7 h-7 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200"><X size={13} /></button>
+                    <button
+                      type="button"
+                      title="Accepter"
+                      onClick={() => updateReservationStatus(req.id, 'confirmed')}
+                      className="w-7 h-7 bg-primary-600 text-white rounded-full flex items-center justify-center hover:bg-primary-700"
+                    >
+                      <Check size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Refuser"
+                      onClick={() => updateReservationStatus(req.id, 'cancelled')}
+                      className="w-7 h-7 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200"
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
-                ) : <span className="badge-green text-xs">Confirmée</span>}
+                ) : req.status === 'confirmed' ? (
+                  <span className="badge-green text-xs">Confirmée</span>
+                ) : (
+                  <span className="text-[10px] text-gray-400 capitalize">{req.status}</span>
+                )}
               </div>
             ))}
           </div>

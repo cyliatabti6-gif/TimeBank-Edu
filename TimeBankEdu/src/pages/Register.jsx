@@ -1,20 +1,75 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, GraduationCap, ArrowRight, Shield, Star, CheckCircle2, TrendingUp } from 'lucide-react';
+import { getApiBase } from '../lib/api';
 
-const filieres = ['Informatique', 'Mathématiques', 'Physique', 'Chimie', 'Biologie', 'Médecine', 'Droit', 'Économie', 'Gestion', 'Lettres', 'Langues'];
+/** Version actuelle : inscription réservée au département Informatique. */
+const FILIERE_INSCRIPTION = 'Informatique';
 const niveaux = ['L1', 'L2', 'L3', 'M1', 'M2', 'Doctorat'];
+
+function formatApiErrors(data) {
+  if (!data || typeof data !== 'object') return 'Une erreur est survenue.';
+  if (typeof data.detail === 'string') return data.detail;
+  const parts = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (Array.isArray(val)) parts.push(`${key}: ${val.join(' ')}`);
+    else if (typeof val === 'string') parts.push(`${key}: ${val}`);
+    else if (val && typeof val === 'object') parts.push(`${key}: ${JSON.stringify(val)}`);
+  }
+  return parts.length ? parts.join(' ') : 'Vérifiez les champs du formulaire.';
+}
 
 export default function Register() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ nom: '', prenom: '', email: '', filiere: '', niveau: '', password: '', confirm: '', bio: '' });
+  const [form, setForm] = useState({
+    nom: '',
+    prenom: '',
+    email: '',
+    filiere: FILIERE_INSCRIPTION,
+    niveau: '',
+    password: '',
+    confirm: '',
+    bio: '',
+  });
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [charCount, setCharCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate('/email-confirmation');
+    setApiError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/inscription/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: form.nom.trim(),
+          prenom: form.prenom.trim(),
+          email: form.email.trim(),
+          filiere: form.filiere,
+          niveau: form.niveau,
+          password: form.password,
+          confirm: form.confirm,
+          bio: form.bio || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApiError(formatApiErrors(data));
+        return;
+      }
+      const registeredEmail = data.user?.email || form.email.trim();
+      navigate('/email-confirmation', { state: { email: registeredEmail } });
+    } catch {
+      setApiError(
+        'Le serveur Django ne répond pas. Ouvrez un terminal, allez dans le dossier « backend », lancez : python manage.py runserver 8000 — puis redémarrez aussi npm run dev (Ctrl+C puis npm run dev) et réessayez.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const benefits = [
@@ -38,8 +93,12 @@ export default function Register() {
         <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div className="text-center mb-7">
             <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">Inscription</span>
-            <h1 className="text-2xl font-bold text-gray-900 mt-3">Créer un <span className="text-primary-600">Compte Étudiant</span></h1>
-            <p className="text-gray-500 text-sm mt-1">Rejoignez la communauté TimeBank Edu et commencez à échanger des heures de tutorat.</p>
+            <h1 className="text-2xl font-bold text-gray-900 mt-3">
+              Créer un compte <span className="text-primary-600">étudiant &amp; tuteur</span>
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Un seul compte pour suivre des cours et proposer des tutorats : une balance d&apos;heures et un score communs.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -78,11 +137,14 @@ export default function Register() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Filière</label>
-                <select value={form.filiere} onChange={e => setForm({ ...form, filiere: e.target.value })}
-                  className="input-field" required>
-                  <option value="">Sélectionnez votre filière</option>
-                  {filieres.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
+                <input
+                  type="text"
+                  value={FILIERE_INSCRIPTION}
+                  readOnly
+                  className="input-field bg-gray-50 text-gray-700 cursor-default"
+                  aria-readonly="true"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Inscription limitée à l&apos;informatique (périmètre du projet).</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Niveau</label>
@@ -100,7 +162,7 @@ export default function Register() {
                 <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input type={showPwd ? 'text' : 'password'} placeholder="Créez un mot de passe" value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
-                  className="input-field pl-9 pr-10" required />
+                  className="input-field pl-9 pr-10" required minLength={8} />
                 <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -114,7 +176,7 @@ export default function Register() {
                 <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input type={showConfirm ? 'text' : 'password'} placeholder="Confirmez votre mot de passe" value={form.confirm}
                   onChange={e => setForm({ ...form, confirm: e.target.value })}
-                  className="input-field pl-9 pr-10" required />
+                  className="input-field pl-9 pr-10" required minLength={8} />
                 <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -138,8 +200,14 @@ export default function Register() {
               </div>
             </div>
 
-            <button type="submit" className="btn-primary w-full py-3 text-base">
-              S'inscrire <ArrowRight size={18} />
+            {apiError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2" role="alert">
+                {apiError}
+              </p>
+            )}
+
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-base disabled:opacity-60">
+              {loading ? 'Inscription…' : <>S&apos;inscrire <ArrowRight size={18} /></>}
             </button>
           </form>
 

@@ -14,8 +14,14 @@ export default function PublicNavbar() {
             <span className="font-bold text-gray-900">TimeBank <span className="text-primary-600">Edu</span></span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
-            {['Accueil', 'Modules', 'Tuteurs', 'À propos', 'Comment ça marche ?'].map((item, i) => (
-              <Link key={i} to={i === 0 ? '/' : i === 1 ? '/modules' : i === 2 ? '/tuteurs' : '#'} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
+            {['Accueil', 'Modules', 'Tuteurs', 'Inscrits', 'À propos', 'Comment ça marche ?'].map((item, i) => (
+              <Link
+                key={i}
+                to={
+                  i === 0 ? '/' : i === 1 ? '/modules' : i === 2 ? '/tuteurs' : i === 3 ? '/etudiants-inscrits' : '#'
+                }
+                className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
+              >
                 {item}
               </Link>
             ))}

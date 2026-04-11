@@ -5,6 +5,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import EtudiantsInscrits from './pages/EtudiantsInscrits';
 import ForgotPassword from './pages/ForgotPassword';
 import EmailConfirmation from './pages/EmailConfirmation';
 import NotFound from './pages/NotFound';
@@ -47,10 +48,25 @@ import Notifications from './pages/shared/Notifications';
 import ReportAbsence from './pages/shared/ReportAbsence';
 import AccountSettings from './pages/shared/AccountSettings';
 
+function canAccessDashboardRole(user, required) {
+  if (!required || !user) return true;
+  if (required === 'admin') return user.role === 'admin' || user.is_staff;
+  if (required === 'student') return user.role === 'student' || user.role === 'both';
+  if (required === 'tutor') return user.role === 'tutor' || user.role === 'both';
+  return false;
+}
+
 function ProtectedRoute({ children, role }) {
-  const { currentUser } = useApp();
+  const { currentUser, bootstrapping } = useApp();
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">
+        Chargement de la session…
+      </div>
+    );
+  }
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (role && currentUser.role !== role) return <Navigate to="/" replace />;
+  if (role && !canAccessDashboardRole(currentUser, role)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -63,6 +79,7 @@ function AppRoutes() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/etudiants-inscrits" element={<EtudiantsInscrits />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/email-confirmation" element={<EmailConfirmation />} />
       <Route path="/maintenance" element={<Maintenance />} />

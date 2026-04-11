@@ -1,7 +1,10 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GraduationCap, Mail, CheckCircle2 } from 'lucide-react';
 
 export default function EmailConfirmation() {
+  const location = useLocation();
+  const email = location.state?.email;
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md text-center">
@@ -24,12 +27,24 @@ export default function EmailConfirmation() {
 
           <h1 className="text-2xl font-bold text-gray-900 mb-3">Vérifiez votre boîte mail !</h1>
           <p className="text-gray-500 mb-3">Nous avons envoyé un lien de confirmation à</p>
-          <p className="font-semibold text-primary-600 text-lg mb-6">sara.benali@univ.dz</p>
-          <p className="text-gray-500 text-sm mb-8">Cliquez sur le lien dans l'email pour activer votre compte.</p>
+          {email ? (
+            <p className="font-semibold text-primary-600 text-lg mb-6 break-all">{email}</p>
+          ) : (
+            <p className="text-gray-600 text-sm mb-6">
+              Adresse non affichée (accès direct à cette page).{' '}
+              <Link to="/register" className="text-primary-600 font-medium hover:underline">Refaire une inscription</Link>
+            </p>
+          )}
+          <p className="text-gray-500 text-sm mb-8">
+            Cliquez sur le lien dans l&apos;e-mail pour activer votre compte.
+            <span className="block mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-100">
+              Démo : aucun e-mail réel n&apos;est encore envoyé par le serveur ; cette étape prépare la vraie confirmation plus tard.
+            </span>
+          </p>
 
           <p className="text-sm text-gray-500">
-            Vous n'avez pas reçu l'email ?{' '}
-            <button className="text-primary-600 font-semibold hover:underline">Renvoyer l'email</button>
+            Vous n&apos;avez pas reçu l&apos;e-mail ?{' '}
+            <button type="button" className="text-primary-600 font-semibold hover:underline">Renvoyer l&apos;e-mail</button>
           </p>
 
           <Link to="/login" className="block mt-4 text-sm text-gray-500 hover:text-primary-600">

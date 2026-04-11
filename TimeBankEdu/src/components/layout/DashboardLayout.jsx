@@ -8,7 +8,7 @@ const studentMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/student/dashboard' },
   { icon: BookOpen, label: 'Mes Tutorats', path: '/student/tutorats' },
   { icon: Search, label: 'Trouver un Module', path: '/student/modules' },
-  { icon: FileText, label: 'Mes Demandes', path: '/student/demandes' },
+  { icon: FileText, label: 'Réservations', path: '/student/demandes' },
   { icon: History, label: 'Historique', path: '/student/historique' },
   { icon: BarChart2, label: 'Statistiques', path: '/student/stats' },
   { icon: User, label: 'Profil', path: '/student/profil' },
@@ -17,7 +17,7 @@ const studentMenu = [
 const tutorMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/tutor/dashboard' },
   { icon: Layers, label: 'Mes Modules', path: '/tutor/modules' },
-  { icon: FileText, label: 'Demandes Reçues', path: '/tutor/demandes' },
+  { icon: FileText, label: 'Réservations reçues', path: '/tutor/demandes' },
   { icon: Calendar, label: 'Planning', path: '/tutor/planning' },
   { icon: BarChart2, label: 'Statistiques', path: '/tutor/stats' },
   { icon: User, label: 'Profil', path: '/tutor/profil' },
@@ -33,6 +33,15 @@ const adminMenu = [
   { icon: Settings, label: 'Paramètres', path: '/admin/parametres' },
 ];
 
+/** Zone menu : étudiant / tuteur / admin (pour role « both », dépend de l’URL). */
+function dashboardArea(user, pathname) {
+  if (!user) return 'student';
+  if (user.role === 'admin' || user.is_staff) return 'admin';
+  if (user.role === 'tutor') return 'tutor';
+  if (user.role === 'both') return pathname.startsWith('/tutor') ? 'tutor' : 'student';
+  return 'student';
+}
+
 export default function DashboardLayout({ children }) {
   const { currentUser, logout, notifications } = useApp();
   const location = useLocation();
@@ -40,10 +49,12 @@ export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const role = currentUser?.role;
-  const menu = role === 'admin' ? adminMenu : role === 'tutor' ? tutorMenu : studentMenu;
+  const rawRole = currentUser?.role;
+  const area = dashboardArea(currentUser, location.pathname);
+  const menu = area === 'admin' ? adminMenu : area === 'tutor' ? tutorMenu : studentMenu;
   const unread = notifications?.filter(n => !n.read).length || 0;
-  const isAdmin = role === 'admin';
+  const isAdmin = area === 'admin';
+  const isBoth = rawRole === 'both';
 
   const handleLogout = () => { logout(); navigate('/'); };
 
@@ -55,7 +66,26 @@ export default function DashboardLayout({ children }) {
         </div>
         <span className="font-bold text-gray-900">TimeBank <span className="text-primary-600">Edu</span></span>
         {isAdmin && <span className="text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded ml-1">Admin</span>}
+        {isBoth && <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded ml-1">Étud. & tuteur</span>}
       </div>
+      {isBoth && (
+        <div className="px-3 pb-2 flex gap-1.5">
+          <Link
+            to="/student/dashboard"
+            onClick={() => setSidebarOpen(false)}
+            className={`flex-1 text-center text-xs font-medium py-2 rounded-lg border ${area === 'student' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            Espace étudiant
+          </Link>
+          <Link
+            to="/tutor/dashboard"
+            onClick={() => setSidebarOpen(false)}
+            className={`flex-1 text-center text-xs font-medium py-2 rounded-lg border ${area === 'tutor' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            Espace tuteur
+          </Link>
+        </div>
+      )}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {menu.map(({ icon: Icon, label, path }) => (
           <Link key={path} to={path} onClick={() => setSidebarOpen(false)}
@@ -119,15 +149,10 @@ export default function DashboardLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
+          <div className="flex items-center gap-3 min-h-[40px]">
+            <button type="button" className="lg:hidden" onClick={() => setSidebarOpen(true)} aria-label="Ouvrir le menu">
               <Menu size={20} className="text-gray-600" />
             </button>
-            <input
-              type="text"
-              placeholder={isAdmin ? 'Rechercher un utilisateur, module...' : 'Rechercher un module, un tuteur...'}
-              className="hidden sm:block w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -153,12 +178,12 @@ export default function DashboardLayout({ children }) {
                     ))}
                   </div>
                   <div className="px-4 py-2.5 text-center">
-                    <Link to={`/${role}/notifications`} className="text-xs text-primary-600 font-medium" onClick={() => setNotifOpen(false)}>Voir toutes les notifications</Link>
+                    <Link to={`/${area}/notifications`} className="text-xs text-primary-600 font-medium" onClick={() => setNotifOpen(false)}>Voir toutes les notifications</Link>
                   </div>
                 </div>
               )}
             </div>
-            <Link to={`/${role}/profil`} className="flex items-center gap-2 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors">
+            <Link to={`/${area}/profil`} className="flex items-center gap-2 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors">
               <Avatar initials={currentUser?.avatar || 'U'} size="sm" />
               <span className="hidden sm:block text-sm font-medium text-gray-700">{currentUser?.name?.split(' ')[0] || 'User'}</span>
               <ChevronDown size={14} className="text-gray-400" />
