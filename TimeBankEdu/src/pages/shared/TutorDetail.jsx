@@ -5,8 +5,7 @@ import PublicNavbar from '../../components/layout/PublicNavbar';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
-import { mockTutors, mockModules } from '../../context/AppContext';
-import { useApp } from '../../context/AppContext';
+import { mockTutors, mockModules, useApp } from '../../context/AppContext';
 import { fetchModuleById } from '../../lib/modulesApi';
 import { fetchTutorPublicAvis } from '../../lib/evaluationsApi';
 
@@ -47,6 +46,7 @@ function formatAvisDate(iso) {
 
 function TutorDetailContent({ moduleId: moduleIdParam }) {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const moduleId = parseInt(moduleIdParam, 10);
   const [mod, setMod] = useState(null);
   const [tutor, setTutor] = useState(null);
@@ -162,6 +162,14 @@ function TutorDetailContent({ moduleId: moduleIdParam }) {
 
   const handleDemander = () => {
     if (!selectedCreneau) return;
+    const tid = Number(mod.tutorId);
+    const uid = currentUser?.id != null ? Number(currentUser.id) : null;
+    if (uid != null && Number.isFinite(tid) && tid === uid) {
+      alert(
+        "Vous ne pouvez pas demander une séance auprès de vous-même. Avec un compte « étudiant et tuteur », réservez depuis un autre compte étudiant ou faites tester par un camarade.",
+      );
+      return;
+    }
     navigate('/booking/new', {
       state: {
         moduleId: mod.id,

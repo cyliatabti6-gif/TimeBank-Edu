@@ -42,6 +42,56 @@ export async function createTutorModule(body, accessToken) {
 }
 
 /**
+ * Détail d'un module appartenant au tuteur connecté (JWT).
+ * @param {number|string} moduleId
+ * @param {string} accessToken
+ */
+export async function fetchMyTutorModuleById(moduleId, accessToken) {
+  const base = getApiBase();
+  const r = await fetch(`${base}/api/tuteur/modules/${moduleId}/`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = typeof data === 'object' && data && (data.detail || data.message);
+    const err = new Error(msg || `Erreur ${r.status}`);
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * Met à jour un module appartenant au tuteur connecté (JWT).
+ * @param {number|string} moduleId
+ * @param {object} body
+ * @param {string} accessToken
+ */
+export async function updateTutorModule(moduleId, body, accessToken) {
+  const base = getApiBase();
+  const r = await fetch(`${base}/api/tuteur/modules/${moduleId}/`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = typeof data === 'object' && data && (data.detail || data.message);
+    const err = new Error(msg || `Erreur ${r.status}`);
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+/**
  * Liste des modules proposés (catalogue).
  * @param {{ niveau?: string }} params — ex. { niveau: 'L2' }
  */

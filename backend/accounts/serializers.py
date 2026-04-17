@@ -12,6 +12,7 @@ from .models import (
     Niveau,
     Reservation,
     Role,
+    SignalementSeance,
     StatutModule,
     StatutReservation,
     User,
@@ -103,6 +104,7 @@ class UserLectureSerializer(serializers.ModelSerializer):
             "score",
             "tutor_review_count",
             "role",
+            "modules_maitrises",
             "is_staff",
             "date_joined",
         )
@@ -112,9 +114,15 @@ class UserLectureSerializer(serializers.ModelSerializer):
 class ProfilMiseAJourSerializer(serializers.ModelSerializer):
     """Champs modifiables (CDCF : l’e-mail universitaire ne change pas). Rôle : student / tutor / both (pas admin)."""
 
+    modules_maitrises = serializers.ListField(
+        child=serializers.CharField(max_length=120),
+        required=False,
+        allow_empty=True,
+    )
+
     class Meta:
         model = User
-        fields = ("name", "filiere", "niveau", "description", "role")
+        fields = ("name", "filiere", "niveau", "description", "role", "modules_maitrises")
 
     def validate_name(self, value):
         if value is not None and not str(value).strip():
@@ -139,6 +147,33 @@ class ProfilMiseAJourSerializer(serializers.ModelSerializer):
                 "Rôle non autorisé. Valeurs possibles : étudiant, tuteur, ou les deux."
             )
         return value
+
+    def validate_modules_maitrises(self, value):
+        if value is None:
+            return None
+        cleaned = []
+        seen = set()
+        for raw in value:
+            t = (raw or "").strip()
+            if not t:
+                continue
+            key = t.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(t)
+        if len(cleaned) > 30:
+            raise serializers.ValidationError("Vous pouvez enregistrer au plus 30 modules maîtrisés.")
+        return cleaned
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("modules_maitrises") is not None and self.instance.role not in (
+            Role.TUTOR,
+            Role.BOTH,
+        ):
+            attrs.pop("modules_maitrises", None)
+        return attrs
 
     def update(self, instance, validated_data):
         if instance.is_superuser and "role" in validated_data:
@@ -402,3 +437,66 @@ class SeanceDetailSerializer(serializers.ModelSerializer):
 
     def get_evaluated(self, obj):
         return EvaluationSeance.objects.filter(reservation_id=obj.pk).exists()
+
+
+class SignalementCreateSerializer(serializers.Serializer):
+    issue_type = serializers.CharField(max_length=64)
+    description = serializers.CharField(max_length=500, allow_blank=True, default="")
+
+
+class SignalementRecuSerializer(serializers.ModelSerializer):
+    reservation_id = serializers.IntegerField(source="reservation.id", read_only=True)
+    reservation_status = serializers.CharField(source="reservation.statut", read_only=True)
+    module = serializers.CharField(source="reservation.module_titre", read_only=True)
+    student_name = serializers.CharField(source="reservation.etudiant.name", read_only=True)
+    student_id = serializers.IntegerField(source="reservation.etudiant_id", read_only=True)
+    reporter_name = serializers.CharField(source="auteur.name", read_only=True)
+    reporter_role = serializers.CharField(source="role_auteur", read_only=True)
+    issue_type = serializers.CharField(source="code_motif", read_only=True)
+
+    class Meta:
+        model = SignalementSeance
+        fields = (
+            "id",
+            "reservation_id",
+            "reservation_status",
+            "module",
+            "student_name",
+            "student_id",
+            "reporter_name",
+            "reporter_role",
+            "issue_type",
+            "description",
+            "created_at",
+        )
+
+
+class SignalementPourEtudiantSerializer(serializers.ModelSerializer):
+    """Signalements laissés par le tuteur — visibles par l’étudiant (excuses, etc.)."""
+
+    reservation_id = serializers.IntegerField(source="reservation.id", read_only=True)
+    reservation_status = serializers.CharField(source="reservation.statut", read_only=True)
+    module = serializers.CharField(source="reservation.module_titre", read_only=True)
+    tutor_name = serializers.CharField(source="reservation.tuteur.name", read_only=True)
+    tutor_id = serializers.IntegerField(source="reservation.tuteur_id", read_only=True)
+    date_label = serializers.CharField(source="reservation.date_label", read_only=True)
+    creneau_label = serializers.CharField(source="reservation.creneau_label", read_only=True)
+    reporter_name = serializers.CharField(source="auteur.name", read_only=True)
+    issue_type = serializers.CharField(source="code_motif", read_only=True)
+
+    class Meta:
+        model = SignalementSeance
+        fields = (
+            "id",
+            "reservation_id",
+            "reservation_status",
+            "module",
+            "tutor_name",
+            "tutor_id",
+            "date_label",
+            "creneau_label",
+            "reporter_name",
+            "issue_type",
+            "description",
+            "created_at",
+        )

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Check, X, MessageCircle, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Check, X, MessageCircle, Search, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
@@ -39,6 +40,7 @@ function initials(name) {
 }
 
 export default function ReceivedRequests() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
   const [search, setSearch] = useState('');
   const {
@@ -89,13 +91,14 @@ export default function ReceivedRequests() {
       try {
         const data = await confirmSeanceEndOnServer(rid, token);
         upsertReservationFromApiDetail(data);
+        let me = null;
         try {
-          const me = await fetchAuthenticatedProfile(token);
+          me = await fetchAuthenticatedProfile(token);
           setCurrentUser(mapApiUserToAppUser(me));
         } catch {
           /* ignore */
         }
-        if (data.status === 'completed' && Number(currentUser?.id) === Number(data.tutorId)) {
+        if (data.status === 'completed' && me != null && Number(me.id) === Number(data.tutorId)) {
           alert('Séance clôturée. Vos heures ont été créditées sur le serveur. L’étudiant peut maintenant vous évaluer.');
         } else if (data.status !== 'completed') {
           alert(
@@ -250,6 +253,27 @@ export default function ReceivedRequests() {
                   className="flex items-center gap-1.5 bg-emerald-600 text-white text-xs px-4 py-2 rounded-lg hover:bg-emerald-700 font-medium"
                 >
                   <Check size={13} /> Confirmer la fin de séance
+                </button>
+              ) : null}
+              {(req.status === 'confirmed' || req.status === 'in_progress') ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/report-absence', {
+                      state: {
+                        reservationId: req.id,
+                        tutorName: currentUser?.name || '—',
+                        studentName: req.studentName,
+                        module: req.module,
+                        date: req.date,
+                        creneauLabel: req.creneauLabel,
+                        reporterRole: 'tutor',
+                      },
+                    })
+                  }
+                  className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-900 text-xs px-3 py-2 rounded-lg hover:bg-amber-100 font-medium"
+                >
+                  <AlertTriangle size={13} /> Signaler
                 </button>
               ) : null}
               <button

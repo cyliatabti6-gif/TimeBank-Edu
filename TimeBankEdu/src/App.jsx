@@ -24,6 +24,7 @@ import MyTutorials from './pages/student/MyTutorials';
 import TutorDashboard from './pages/tutor/Dashboard';
 import MyModules from './pages/tutor/MyModules';
 import ProposeModule from './pages/tutor/ProposeModule';
+import TutorModuleView from './pages/tutor/TutorModuleView';
 import ReceivedRequests from './pages/tutor/ReceivedRequests';
 import Planning from './pages/tutor/Planning';
 import TutorStats from './pages/tutor/TutorStats';
@@ -102,6 +103,8 @@ function AppRoutes() {
       <Route path="/tutor/dashboard" element={<ProtectedRoute role="tutor"><TutorDashboard /></ProtectedRoute>} />
       <Route path="/tutor/modules" element={<ProtectedRoute role="tutor"><MyModules /></ProtectedRoute>} />
       <Route path="/tutor/modules/new" element={<ProtectedRoute role="tutor"><ProposeModule /></ProtectedRoute>} />
+      <Route path="/tutor/modules/:id/edit" element={<ProtectedRoute role="tutor"><ProposeModule /></ProtectedRoute>} />
+      <Route path="/tutor/modules/:id" element={<ProtectedRoute role="tutor"><TutorModuleView /></ProtectedRoute>} />
       <Route path="/tutor/demandes" element={<ProtectedRoute role="tutor"><ReceivedRequests /></ProtectedRoute>} />
       <Route path="/tutor/planning" element={<ProtectedRoute role="tutor"><Planning /></ProtectedRoute>} />
       <Route path="/tutor/stats" element={<ProtectedRoute role="tutor"><TutorStats /></ProtectedRoute>} />

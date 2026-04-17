@@ -6,24 +6,27 @@ import {
   Video,
   VideoOff,
   PhoneOff,
-  MessageCircle,
   Users,
   FileText,
-  Send,
   CheckCircle2,
   Clock,
+  MapPin,
+  AlertTriangle,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import { mapApiUserToAppUser, useApp } from '../../context/AppContext';
+import { fetchAuthenticatedProfile } from '../../lib/api';
 import { getAccessToken } from '../../lib/authStorage';
 import { confirmSeanceEndOnServer, fetchSeanceById } from '../../lib/seancesApi';
 
-const messages = [
-  { sender: 'Ahmed', mine: false, text: 'Bonjour ! On va commencer par la fusion des algorithmes de tri.', time: '10:00' },
-  { sender: 'Sara', mine: true, text: 'Parfait ! J\'ai quelques questions sur le quicksort.', time: '10:01' },
-  { sender: 'Ahmed', mine: false, text: 'Bien sûr, posez votre question !', time: '10:02' },
-];
+function reporterRoleForReservation(res, currentUser) {
+  const uid = Number(currentUser?.id);
+  if (!Number.isFinite(uid)) return 'student';
+  if (Number(res.studentId) === uid) return 'student';
+  if (Number(res.tutorId) === uid) return 'tutor';
+  return 'student';
+}
 
 function initials(name) {
   const p = (name || '').trim().split(/\s+/).filter(Boolean);
@@ -31,39 +34,49 @@ function initials(name) {
   return (p[0] || 'U').slice(0, 2).toUpperCase();
 }
 
+/** Format séance : API renvoie « Présentiel » ou « Online » (SeanceDetailSerializer.format). */
+function normalizeFormat(f) {
+  if (f === 'Présentiel') return 'Présentiel';
+  if (f === 'Online') return 'Online';
+  return 'Online';
+}
+
 /** Forme unique pour l’UI : localStorage (AppContext) ou réponse API. */
 function toSessionShape(r) {
   if (!r) return null;
+  let shaped;
   /** Réservation créée / sync via Django : il faut appeler l’API pour confirmer-fin (pas seulement le state local). */
   if (r.fromServer) {
-    return { ...r, status: r.status, _fromApi: true };
-  }
-  /** GET /api/seances/:id/ renvoie `student` / `tutor` (pas `fromServer`) : toujours traiter comme serveur. */
-  if (r.student != null && r.tutor != null) {
-    return {
+    shaped = { ...r, status: r.status, _fromApi: true };
+  } else if (r.student != null && r.tutor != null) {
+    /** GET /api/seances/:id/ renvoie `student` / `tutor` (pas `fromServer`) : toujours traiter comme serveur. */
+    shaped = {
       ...r,
       studentName: r.studentName ?? r.student,
       tutorName: r.tutorName ?? r.tutor,
       status: r.status,
       _fromApi: true,
     };
+  } else if (r.studentName != null && r.tutorName != null) {
+    shaped = { ...r, status: r.status, _fromApi: false };
+  } else {
+    shaped = {
+      id: r.id,
+      studentName: r.student,
+      tutorName: r.tutor,
+      tutorId: r.tutorId,
+      module: r.module,
+      date: r.date,
+      creneauLabel: r.time,
+      duration: r.duration,
+      status: r.status,
+      format: r.format,
+      _fromApi: true,
+    };
   }
-  if (r.studentName != null && r.tutorName != null) {
-    return { ...r, status: r.status, _fromApi: false };
-  }
-  return {
-    id: r.id,
-    studentName: r.student,
-    tutorName: r.tutor,
-    tutorId: r.tutorId,
-    module: r.module,
-    date: r.date,
-    creneauLabel: r.time,
-    duration: r.duration,
-    status: r.status,
-    format: r.format,
-    _fromApi: true,
-  };
+  const creneauLabel = shaped.creneauLabel ?? shaped.time ?? '';
+  const format = normalizeFormat(shaped.format);
+  return { ...shaped, creneauLabel, format };
 }
 
 export default function Session() {
@@ -123,26 +136,25 @@ export default function Session() {
 
   const [micOn, setMicOn] = useState(true);
   const [videoOn, setVideoOn] = useState(true);
-  const [message, setMessage] = useState('');
-  const [msgs, setMsgs] = useState(messages);
   const [ended, setEnded] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
 
   const reservation = active;
 
-  const sendMsg = () => {
-    if (!message.trim()) return;
-    setMsgs((prev) => [
-      ...prev,
-      {
-        sender: currentUser?.name?.split(' ')[0] || 'Moi',
-        mine: true,
-        text: message,
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+  const goReportAbsence = () => {
+    if (!reservation) return;
+    navigate('/report-absence', {
+      state: {
+        reservationId: reservation.id,
+        tutorName: reservation.tutorName,
+        studentName: reservation.studentName,
+        module: reservation.module,
+        date: reservation.date,
+        creneauLabel: reservation.creneauLabel,
+        reporterRole: reporterRoleForReservation(reservation, currentUser),
       },
-    ]);
-    setMessage('');
+    });
   };
 
   const handleConfirmPresence = async () => {
@@ -159,14 +171,15 @@ export default function Session() {
         const data = await confirmSeanceEndOnServer(reservationId, token);
         upsertReservationFromApiDetail(data);
         setActive(toSessionShape({ ...data, fromServer: true }));
+        let me = null;
+        try {
+          me = await fetchAuthenticatedProfile(token);
+          setCurrentUser(mapApiUserToAppUser(me));
+        } catch {
+          /* balance inchangée si /me échoue */
+        }
         if (data.status === 'completed') {
-          try {
-            const me = await fetchAuthenticatedProfile(token);
-            setCurrentUser(mapApiUserToAppUser(me));
-          } catch {
-            /* balance locale inchangée si /me échoue */
-          }
-          if (Number(currentUser?.id) === Number(data.studentId)) {
+          if (me != null && Number(me.id) === Number(data.studentId)) {
             navigate(`/evaluation/${reservationId}`, {
               state: {
                 reservationId,
@@ -296,7 +309,8 @@ export default function Session() {
     );
   }
 
-  if (reservation.status !== 'confirmed') {
+  const sessionActive = reservation.status === 'confirmed' || reservation.status === 'in_progress';
+  if (!sessionActive) {
     return (
       <DashboardLayout>
         <div className="max-w-lg mx-auto py-12 text-center text-gray-600 text-sm">
@@ -311,6 +325,7 @@ export default function Session() {
 
   const stInit = initials(reservation.studentName);
   const tuInit = initials(reservation.tutorName);
+  const isPresentiel = reservation.format === 'Présentiel';
 
   if (ended) {
     return (
@@ -347,21 +362,14 @@ export default function Session() {
             </p>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex justify-center">
             <button
               type="button"
               disabled={confirmSubmitting}
               onClick={() => void handleConfirmPresence()}
-              className="btn-primary py-3 disabled:opacity-60 disabled:pointer-events-none"
+              className="btn-primary py-3 px-8 disabled:opacity-60 disabled:pointer-events-none inline-flex items-center gap-2"
             >
               <CheckCircle2 size={16} /> {confirmSubmitting ? 'Envoi…' : 'Confirmer ma présence'}
-            </button>
-            <button
-              type="button"
-              className="btn-secondary py-3 text-red-500 border-red-200 hover:bg-red-50"
-              onClick={() => navigate('/report-absence', { state: { reservationId: reservation.id } })}
-            >
-              Signaler un problème
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-4">
@@ -375,67 +383,137 @@ export default function Session() {
 
   return (
     <DashboardLayout>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-bold text-gray-900">Session en cours</h1>
+          <h1 className="font-bold text-gray-900">{isPresentiel ? 'Séance en présentiel' : 'Session en cours'}</h1>
           <p className="text-xs text-gray-500">
             {reservation.module} • Avec {reservation.tutorName}
           </p>
+          {isPresentiel ? (
+            <p className="text-xs text-purple-800 mt-1.5 flex flex-wrap items-center gap-1.5">
+              <MapPin size={14} className="text-purple-600 flex-shrink-0" />
+              <span>
+                {reservation.date || '—'}
+                {reservation.creneauLabel ? ` · ${reservation.creneauLabel}` : ''} · {reservation.duration} h
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          <span className="text-xs text-red-500 font-medium">En direct</span>
+          {isPresentiel ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-purple-800 bg-purple-100 border border-purple-200 rounded-full px-3 py-1">
+              <MapPin size={14} /> Présentiel
+            </span>
+          ) : (
+            <>
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-xs text-red-500 font-medium">En direct</span>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-200px)]">
-        <div className="lg:col-span-2 flex flex-col gap-3">
-          <div className="flex-1 bg-gray-900 rounded-2xl relative overflow-hidden min-h-64">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Avatar initials={tuInit} size="xl" color="blue" />
-                <p className="text-white font-medium mt-2">{reservation.tutorName}</p>
-                <p className="text-gray-400 text-sm">Tuteur • En ligne</p>
+      <div className="flex flex-col gap-4 max-w-4xl">
+        <div className="flex flex-col gap-3">
+          {isPresentiel ? (
+            <>
+              <div className="flex-1 min-h-64 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white p-6 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mb-4">
+                  <MapPin size={32} className="text-purple-600" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900">Rencontre physique</p>
+                <p className="text-xs text-gray-600 mt-2 max-w-md">
+                  Cette séance est prévue <strong>en présentiel</strong>. Le lieu se règle avec votre tuteur (messages, campus,
+                  salle). Ce n’est pas une visioconférence intégrée ici.
+                </p>
+                <div className="mt-5 flex items-center gap-4">
+                  <Avatar initials={tuInit} size="lg" color="blue" />
+                  <span className="text-gray-400">↔</span>
+                  <Avatar initials={stInit} size="lg" />
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  Tuteur : {reservation.tutorName} • Vous : {reservation.studentName}
+                </p>
+                <div className="mt-6 flex flex-col sm:flex-row items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEnded(true)}
+                    className="btn-primary py-2.5 px-6 text-sm inline-flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={16} /> Terminer la séance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goReportAbsence}
+                    className="text-xs text-amber-800 hover:text-amber-900 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50/80 hover:bg-amber-50"
+                  >
+                    <AlertTriangle size={14} /> Signaler un problème
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 bg-gray-900 rounded-2xl relative overflow-hidden min-h-64">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Avatar initials={tuInit} size="xl" color="blue" />
+                  <p className="text-white font-medium mt-2">{reservation.tutorName}</p>
+                  <p className="text-gray-400 text-sm">Tuteur • En ligne</p>
+                </div>
+              </div>
+              <div className="absolute bottom-3 right-3 w-24 h-16 bg-gray-700 rounded-xl flex items-center justify-center">
+                <Avatar initials={stInit} size="sm" />
+              </div>
+              <div className="absolute top-3 left-3 bg-black/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
+                <Clock size={13} className="text-white" />
+                <span className="text-white text-xs font-mono">00:45:32</span>
               </div>
             </div>
-            <div className="absolute bottom-3 right-3 w-24 h-16 bg-gray-700 rounded-xl flex items-center justify-center">
-              <Avatar initials={stInit} size="sm" />
-            </div>
-            <div className="absolute top-3 left-3 bg-black/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
-              <Clock size={13} className="text-white" />
-              <span className="text-white text-xs font-mono">00:45:32</span>
-            </div>
-          </div>
+          )}
 
-          <div className="bg-white rounded-2xl p-4 flex items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMicOn(!micOn)}
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${micOn ? 'bg-gray-100 hover:bg-gray-200' : 'bg-red-500 text-white'}`}
-            >
-              {micOn ? <Mic size={18} className="text-gray-600" /> : <MicOff size={18} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setVideoOn(!videoOn)}
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${videoOn ? 'bg-gray-100 hover:bg-gray-200' : 'bg-red-500 text-white'}`}
-            >
-              {videoOn ? <Video size={18} className="text-gray-600" /> : <VideoOff size={18} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEnded(true)}
-              className="w-12 h-12 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all"
-            >
-              <PhoneOff size={18} className="text-white" />
-            </button>
-            <button
-              type="button"
-              className="w-11 h-11 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center"
-            >
-              <Users size={18} className="text-gray-600" />
-            </button>
-          </div>
+          {!isPresentiel ? (
+            <div className="bg-white rounded-2xl p-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMicOn(!micOn)}
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${micOn ? 'bg-gray-100 hover:bg-gray-200' : 'bg-red-500 text-white'}`}
+              >
+                {micOn ? <Mic size={18} className="text-gray-600" /> : <MicOff size={18} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoOn(!videoOn)}
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${videoOn ? 'bg-gray-100 hover:bg-gray-200' : 'bg-red-500 text-white'}`}
+              >
+                {videoOn ? <Video size={18} className="text-gray-600" /> : <VideoOff size={18} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEnded(true)}
+                className="w-12 h-12 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all"
+              >
+                <PhoneOff size={18} className="text-white" />
+              </button>
+              <button
+                type="button"
+                className="w-11 h-11 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center"
+              >
+                <Users size={18} className="text-gray-600" />
+              </button>
+            </div>
+          ) : null}
+
+          {!isPresentiel ? (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={goReportAbsence}
+                className="text-xs text-amber-800 hover:text-amber-900 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50/80 hover:bg-amber-50"
+              >
+                <AlertTriangle size={14} /> Signaler un problème
+              </button>
+            </div>
+          ) : null}
 
           <div className="card">
             <h4 className="text-sm font-semibold text-gray-700 mb-2">Ressources partagées</h4>
@@ -449,53 +527,6 @@ export default function Session() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-
-        <div className="card flex flex-col p-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-            <MessageCircle size={16} className="text-primary-600" />
-            <h3 className="font-semibold text-sm">Chat</h3>
-          </div>
-
-          <div className="px-3 py-2 bg-primary-50 border-b border-primary-100">
-            <p className="text-xs font-semibold text-primary-700 mb-1">Objectifs de la session :</p>
-            {['Comprendre le tri fusion', 'Analyser la complexité', 'Faire des exercices'].map((o, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-xs text-primary-600">
-                <CheckCircle2 size={11} /> {o}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {msgs.map((m, i) => (
-              <div key={i} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs ${m.mine ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-                >
-                  <p>{m.text}</p>
-                  <p className={`text-[10px] mt-1 ${m.mine ? 'text-primary-200' : 'text-gray-400'} text-right`}>{m.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="p-3 border-t border-gray-100 flex gap-2">
-            <input
-              type="text"
-              placeholder="Écrire un message..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendMsg()}
-              className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <button
-              type="button"
-              onClick={sendMsg}
-              className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center hover:bg-primary-700 flex-shrink-0"
-            >
-              <Send size={13} className="text-white" />
-            </button>
           </div>
         </div>
       </div>

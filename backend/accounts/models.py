@@ -52,6 +52,11 @@ class User(AbstractUser):
         choices=Role.choices,
         default=Role.STUDENT,
     )
+    modules_maitrises = models.JSONField(
+        "modules maîtrisés (libellés libres, hors catalogue)",
+        default=list,
+        blank=True,
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name", "filiere", "niveau"]
@@ -192,6 +197,36 @@ class Reservation(models.Model):
             raise ValidationError({"tuteur": "Le tuteur doit avoir le rôle tuteur ou les deux."})
         if self.etudiant_id and self.etudiant.role not in (Role.STUDENT, Role.BOTH):
             raise ValidationError({"etudiant": "L’étudiant doit avoir le rôle étudiant ou les deux."})
+
+
+class SignalementSeance(models.Model):
+    """Problème signalé par l’étudiant ou le tuteur sur une réservation (no-show, retard, etc.)."""
+
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.CASCADE,
+        related_name="signalements",
+    )
+    auteur = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="signalements_emis",
+    )
+    role_auteur = models.CharField(
+        max_length=20,
+        help_text="student ou tutor",
+    )
+    code_motif = models.CharField(max_length=64)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "signalement de séance"
+        verbose_name_plural = "signalements de séance"
+
+    def __str__(self):
+        return f"Signalement {self.code_motif} — réservation {self.reservation_id}"
 
 
 class EvaluationSeance(models.Model):

@@ -16,7 +16,7 @@ export default function BookingRequest() {
   const navigate = useNavigate();
   const location = useLocation();
   const fromModule = location.state;
-  const { addReservation, currentUser, upsertReservationFromApiDetail } = useApp();
+  const { addReservation, currentUser, upsertReservationFromApiDetail, displayBalance } = useApp();
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,19 +55,28 @@ export default function BookingRequest() {
     setSubmitError('');
     const token = getAccessToken();
     const tutorId = fromModule?.tutorId ?? mockTutors.find((t) => t.name === form.tutor)?.id;
+    const tutorIdNum = tutorId != null ? Number(tutorId) : NaN;
+    const studentIdNum = Number(currentUser.id);
+    if (Number.isFinite(tutorIdNum) && Number.isFinite(studentIdNum) && tutorIdNum === studentIdNum) {
+      setSubmitError(
+        'Vous ne pouvez pas envoyer une demande à vous-même. Avec un compte « étudiant et tuteur », connectez-vous avec un autre compte étudiant pour réserver ce cours.',
+      );
+      return;
+    }
     if (token && tutorId) {
       setSubmitting(true);
       try {
+        const hours = parseDurationHours(form.duration);
         const body = {
-          tutor: tutorId,
+          tutor: tutorIdNum,
           module_titre: form.module,
           date_label: form.date || '',
           creneau_label: form.slot || '',
-          duree_heures: parseDurationHours(form.duration),
+          duree_heures: hours,
           format_seance: fromModule?.format === 'Présentiel' ? 'Présentiel' : 'Online',
           message: form.message || '',
         };
-        if (fromModule?.moduleId) body.module_propose = fromModule.moduleId;
+        if (fromModule?.moduleId != null) body.module_propose = Number(fromModule.moduleId);
         const data = await createStudentReservation(token, body);
         upsertReservationFromApiDetail(data, { message: form.message, studentScore: Number(currentUser.score) || 0 });
         navigate('/student/demandes');
@@ -175,8 +184,8 @@ export default function BookingRequest() {
             <Shield size={16} className="text-primary-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-primary-700">
               {getAccessToken()
-                ? 'Votre demande est enregistrée sur le serveur Django (visible par le tuteur).'
-                : 'Connectez-vous pour enregistrer la demande sur le serveur ; sinon elle reste locale au navigateur.'}
+                ? 'Une fois le formulaire envoyé avec succès, la demande est enregistrée sur le serveur et visible par le tuteur. En cas d’erreur, un message rouge s’affiche sous ce bloc.'
+                : 'Connectez-vous pour enregistrer la demande sur le serveur ; sinon elle reste uniquement dans ce navigateur.'}
             </p>
           </div>
 
@@ -218,8 +227,14 @@ export default function BookingRequest() {
 
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl">
             <p className="text-xs text-yellow-700 font-medium">⚠️ Solde requis</p>
-            <p className="text-xs text-yellow-600 mt-1">2 heures seront déduites de votre balance après confirmation.</p>
-            <p className="text-xs text-yellow-600">Balance actuelle : <strong>3h disponibles</strong></p>
+            <p className="text-xs text-yellow-600 mt-1">
+              {parseDurationHours(form.duration)} h seront débitées de votre solde après confirmation par le tuteur et la
+              clôture de la séance.
+            </p>
+            <p className="text-xs text-yellow-600">
+              Solde affiché :{' '}
+              <strong>{displayBalance != null ? `${displayBalance} h` : `${Number(currentUser?.balance) || 0} h`}</strong>
+            </p>
           </div>
         </div>
       </div>

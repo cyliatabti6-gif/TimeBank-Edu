@@ -88,13 +88,14 @@ export default function MyRequests() {
         try {
           const data = await confirmSeanceEndOnServer(rid, token);
           upsertReservationFromApiDetail(data);
+          let me = null;
           try {
-            const me = await fetchAuthenticatedProfile(token);
+            me = await fetchAuthenticatedProfile(token);
             setCurrentUser(mapApiUserToAppUser(me));
           } catch {
             /* ignore */
           }
-          if (data.status === 'completed' && Number(currentUser?.id) === Number(data.studentId)) {
+          if (data.status === 'completed' && me != null && Number(me.id) === Number(data.studentId)) {
             navigate(`/evaluation/${rid}`, {
               state: {
                 reservationId: rid,
@@ -180,9 +181,11 @@ export default function MyRequests() {
       state: {
         reservationId: req.id,
         tutorName: req.tutorName,
+        studentName: req.studentName,
         module: req.module,
         date: req.date,
         creneauLabel: req.creneauLabel,
+        reporterRole: 'student',
         flow: 'presentiel_student_issue',
       },
     });
@@ -238,7 +241,7 @@ export default function MyRequests() {
                   {req.date} • {req.creneauLabel} • {req.duration}h
                 </p>
                 {req.message ? <p className="text-xs text-gray-500 mt-1 italic">&laquo; {req.message} &raquo;</p> : null}
-                {req.status === 'confirmed' ? (
+                {req.status === 'confirmed' || req.status === 'in_progress' ? (
                   <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mt-2">
                     {sessionEndHint(req, currentUser?.id)}
                   </p>
@@ -254,7 +257,7 @@ export default function MyRequests() {
                     <X size={13} /> Annuler la demande
                   </button>
                 )}
-                {req.status === 'confirmed' && online && (
+                {(req.status === 'confirmed' || req.status === 'in_progress') && online && (
                   <>
                     <button
                       type="button"
@@ -279,7 +282,7 @@ export default function MyRequests() {
                     </button>
                   </>
                 )}
-                {req.status === 'confirmed' && !online && (
+                {(req.status === 'confirmed' || req.status === 'in_progress') && !online && (
                   <>
                     <button
                       type="button"

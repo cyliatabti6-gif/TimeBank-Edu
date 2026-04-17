@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Edit2, Mail, BookOpen, Calendar, Star, Plus } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Edit2, Mail, BookOpen, Calendar, Star, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
 import EditProfileModal from '../../components/profile/EditProfileModal';
-import { useApp } from '../../context/AppContext';
+import { useApp, mapApiUserToAppUser } from '../../context/AppContext';
+import { getApiBase } from '../../lib/api';
 import { getAccessToken } from '../../lib/authStorage';
 import { fetchTutorEvaluationsRecues } from '../../lib/evaluationsApi';
+
+const MODULE_LABEL_MAX = 120;
 
 export default function TutorProfile() {
   const { currentUser, setCurrentUser, displayBalance } = useApp();
@@ -14,8 +17,15 @@ export default function TutorProfile() {
   const [receivedEvals, setReceivedEvals] = useState([]);
   const [evalsLoading, setEvalsLoading] = useState(false);
   const [evalsError, setEvalsError] = useState('');
+  const [moduleDraft, setModuleDraft] = useState('');
+  const [moduleSaving, setModuleSaving] = useState(false);
+  const [moduleError, setModuleError] = useState('');
+  const [modulesRefreshing, setModulesRefreshing] = useState(false);
 
-  const modules = ['Algorithme', 'Python'];
+  const masteredModules = useMemo(
+    () => (Array.isArray(currentUser?.modulesMaitrises) ? currentUser.modulesMaitrises : []),
+    [currentUser?.modulesMaitrises],
+  );
 
   const loadEvaluations = useCallback(async () => {
     const token = getAccessToken();
@@ -37,6 +47,93 @@ export default function TutorProfile() {
   useEffect(() => {
     loadEvaluations();
   }, [loadEvaluations]);
+
+  const refreshModulesFromServer = useCallback(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    setModulesRefreshing(true);
+    setModuleError('');
+    try {
+      const res = await fetch(`${getApiBase()}/api/auth/me/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setModuleError('Impossible de rafraîchir la liste.');
+        return;
+      }
+      const u = await res.json();
+      setCurrentUser(mapApiUserToAppUser(u));
+    } catch {
+      setModuleError('Impossible de rafraîchir la liste.');
+    } finally {
+      setModulesRefreshing(false);
+    }
+  }, [setCurrentUser]);
+
+  const saveModulesMaitrises = useCallback(
+    async (nextList) => {
+      const token = getAccessToken();
+      if (!token) {
+        setModuleError('Session expirée. Reconnectez-vous.');
+        return;
+      }
+      setModuleSaving(true);
+      setModuleError('');
+      try {
+        const res = await fetch(`${getApiBase()}/api/auth/me/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ modules_maitrises: nextList }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            typeof data.detail === 'string'
+              ? data.detail
+              : Object.entries(data)
+                  .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+                  .join(' ') || 'Enregistrement impossible.';
+          setModuleError(msg);
+          return;
+        }
+        setCurrentUser(mapApiUserToAppUser(data));
+        setModuleDraft('');
+      } catch {
+        setModuleError('Enregistrement impossible.');
+      } finally {
+        setModuleSaving(false);
+      }
+    },
+    [setCurrentUser],
+  );
+
+  const handleAddModule = () => {
+    const name = moduleDraft.trim();
+    if (!name) {
+      setModuleError('Saisissez un nom de module.');
+      return;
+    }
+    if (name.length > MODULE_LABEL_MAX) {
+      setModuleError(`Maximum ${MODULE_LABEL_MAX} caractères.`);
+      return;
+    }
+    if (masteredModules.some((m) => m.toLowerCase() === name.toLowerCase())) {
+      setModuleError('Ce module est déjà dans votre liste.');
+      return;
+    }
+    if (masteredModules.length >= 30) {
+      setModuleError('Vous pouvez enregistrer au plus 30 modules maîtrisés.');
+      return;
+    }
+    saveModulesMaitrises([...masteredModules, name]);
+  };
+
+  const handleRemoveModule = (label) => {
+    saveModulesMaitrises(masteredModules.filter((m) => m !== label));
+  };
 
   const roleLabel =
     currentUser?.role === 'tutor'
@@ -95,20 +192,74 @@ export default function TutorProfile() {
             </div>
 
             <div className="mt-4 text-left">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-gray-700">Modules Enseignés</h3>
-                <button type="button" className="text-xs text-primary-600 flex items-center gap-0.5">
-                  <Plus size={12} /> Ajouter
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">Modules maîtrisés</h3>
+                <button
+                  type="button"
+                  onClick={refreshModulesFromServer}
+                  disabled={modulesRefreshing}
+                  className="text-xs text-primary-600 hover:underline disabled:opacity-50"
+                >
+                  {modulesRefreshing ? '…' : 'Actualiser'}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {modules.map((m) => (
-                  <span key={m} className="bg-primary-50 text-primary-700 text-xs px-2.5 py-1 rounded-full">
-                    {m}
-                  </span>
-                ))}
+              <p className="text-[11px] text-gray-500 mb-2">
+                Indiquez les matières que vous maîtrisez (texte libre, sans publier une offre de cours).
+              </p>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={moduleDraft}
+                  onChange={(e) => {
+                    setModuleDraft(e.target.value);
+                    if (moduleError) setModuleError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddModule();
+                    }
+                  }}
+                  maxLength={MODULE_LABEL_MAX}
+                  placeholder="Ex. Analyse, Algèbre…"
+                  className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  disabled={moduleSaving}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddModule}
+                  disabled={moduleSaving}
+                  className="text-xs shrink-0 text-primary-600 border border-primary-200 rounded-lg px-2.5 py-1.5 hover:bg-primary-50 disabled:opacity-50"
+                >
+                  {moduleSaving ? '…' : 'Ajouter'}
+                </button>
               </div>
+              {moduleError ? <p className="text-xs text-amber-700 mb-2">{moduleError}</p> : null}
+              {masteredModules.length === 0 ? (
+                <p className="text-xs text-gray-400">Aucun module indiqué pour le moment.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {masteredModules.map((m) => (
+                    <span
+                      key={m}
+                      className="inline-flex items-center gap-1 bg-primary-50 text-primary-700 text-xs pl-2.5 pr-1 py-1 rounded-full max-w-full"
+                    >
+                      <span className="truncate">{m}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveModule(m)}
+                        disabled={moduleSaving}
+                        className="p-0.5 rounded-full hover:bg-primary-100 text-primary-600 disabled:opacity-50"
+                        aria-label={`Retirer ${m}`}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
+
           </div>
         </div>
 

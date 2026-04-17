@@ -24,6 +24,10 @@ export function mapApiUserToAppUser(u) {
     }
   }
 
+  const modulesMaitrises = Array.isArray(u.modules_maitrises)
+    ? u.modules_maitrises.map((x) => String(x || '').trim()).filter(Boolean)
+    : [];
+
   return {
     id: u.id,
     name: u.name,
@@ -36,6 +40,7 @@ export function mapApiUserToAppUser(u) {
     score: Number(u.score),
     tutorReviewCount: Number(u.tutor_review_count ?? 0),
     description: u.description || '',
+    modulesMaitrises,
     is_staff: u.is_staff,
     joinedDate,
   };
@@ -186,6 +191,7 @@ function normalizeReservation(r) {
     ...r,
     studentSessionConfirm: Boolean(r.studentSessionConfirm),
     tutorSessionConfirm: Boolean(r.tutorSessionConfirm),
+    evaluated: Boolean(r.evaluated),
   };
 }
 
@@ -396,9 +402,14 @@ export function AppProvider({ children }) {
   const displayBalance = useMemo(() => {
     if (!currentUser?.id) return null;
     const base = Number(currentUser.balance);
+    if (!Number.isFinite(base)) return null;
+    const rounded = Math.round(base * 100) / 100;
+    /* Avec JWT, la balance serveur (/api/auth/me/) fait foi — pas les deltas navigateur (souvent obsolètes). */
+    const token = getAccessToken();
+    if (token) return rounded;
     const d = balanceDeltaByUserId[String(currentUser.id)] ?? 0;
     const v = base + d;
-    return Number.isFinite(v) ? Math.round(v * 100) / 100 : base;
+    return Number.isFinite(v) ? Math.round(v * 100) / 100 : rounded;
   }, [currentUser?.id, currentUser?.balance, balanceDeltaByUserId]);
 
   useEffect(() => {
@@ -476,6 +487,7 @@ export function AppProvider({ children }) {
       format: detail.format === 'Présentiel' || detail.format === 'Online' ? detail.format : 'Online',
       studentSessionConfirm: Boolean(detail.student_session_confirm),
       tutorSessionConfirm: Boolean(detail.tutor_session_confirm),
+      evaluated: Boolean(detail.evaluated),
       fromServer: true,
     });
     setReservations((prev) => {
@@ -524,6 +536,7 @@ export function AppProvider({ children }) {
           format: detail.format === 'Présentiel' || detail.format === 'Online' ? detail.format : 'Online',
           studentSessionConfirm: Boolean(detail.student_session_confirm),
           tutorSessionConfirm: Boolean(detail.tutor_session_confirm),
+          evaluated: Boolean(detail.evaluated),
           fromServer: true,
         });
         const idx = next.findIndex((x) => Number(x.id) === Number(detail.id));
@@ -652,7 +665,13 @@ export function AppProvider({ children }) {
   const login = useCallback((payload) => {
     if (!payload?.access || !payload?.user) return;
     saveTokens(payload.access, payload.refresh);
-    setCurrentUser(mapApiUserToAppUser(payload.user));
+    const u = mapApiUserToAppUser(payload.user);
+    setCurrentUser(u);
+    setBalanceDeltaByUserId((prev) => {
+      const next = { ...prev };
+      delete next[String(u.id)];
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -669,7 +688,15 @@ export function AppProvider({ children }) {
         if (!r.ok) throw new Error('session');
         return r.json();
       })
-      .then((u) => setCurrentUser(mapApiUserToAppUser(u)))
+      .then((u) => {
+        const app = mapApiUserToAppUser(u);
+        setCurrentUser(app);
+        setBalanceDeltaByUserId((prev) => {
+          const next = { ...prev };
+          delete next[String(app.id)];
+          return next;
+        });
+      })
       .catch(() => {
         clearTokens();
         setCurrentUser(null);

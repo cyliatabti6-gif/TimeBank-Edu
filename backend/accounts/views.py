@@ -13,6 +13,7 @@ from .models import (
     Niveau,
     Reservation,
     Role,
+    SignalementSeance,
     StatutModule,
     StatutReservation,
     User,
@@ -27,6 +28,9 @@ from .serializers import (
     ReservationDemandeCreateSerializer,
     SeanceDetailSerializer,
     SeanceEtudiantSerializer,
+    SignalementCreateSerializer,
+    SignalementPourEtudiantSerializer,
+    SignalementRecuSerializer,
     UserLectureSerializer,
     module_propose_to_frontend,
 )
@@ -233,6 +237,77 @@ class TuteurModulesView(APIView):
             actif=True,
         )
         return Response(module_propose_to_frontend(mod), status=status.HTTP_201_CREATED)
+
+
+class TuteurModuleDetailView(APIView):
+    """
+    GET /api/tuteur/modules/<id>/ — détail d'un module du tuteur connecté.
+    PUT /api/tuteur/modules/<id>/ — mise à jour complète d'un module du tuteur connecté.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        user = request.user
+        if user.role not in (Role.TUTOR, Role.BOTH):
+            return Response(
+                {"detail": "Seuls les tuteurs peuvent consulter ce module."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        mod = get_object_or_404(ModulePropose.objects.select_related("tuteur"), pk=pk, tuteur=user, actif=True)
+        return Response(module_propose_to_frontend(mod))
+
+    def put(self, request, pk):
+        user = request.user
+        if user.role not in (Role.TUTOR, Role.BOTH):
+            return Response(
+                {"detail": "Seuls les tuteurs peuvent modifier ce module."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        mod = get_object_or_404(ModulePropose.objects.select_related("tuteur"), pk=pk, tuteur=user, actif=True)
+        ser = ModuleProposeCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        creneaux_norm = []
+        for c in data["creneaux"]:
+            cid = (c.get("id") or "").strip() or f"c-{uuid.uuid4().hex[:12]}"
+            creneaux_norm.append(
+                {
+                    "id": cid,
+                    "libelle": c["libelle"].strip(),
+                    "date": (c.get("date") or "").strip(),
+                    "disponible": bool(c.get("disponible", True)),
+                }
+            )
+        tags = [str(x).strip() for x in (data.get("tags") or []) if str(x).strip()]
+
+        mod.titre = data["titre"].strip()
+        mod.niveau = data["niveau"]
+        mod.format_seance = data["format_seance"]
+        mod.planning = (data.get("planning") or "").strip()
+        mod.description = (data.get("description") or "").strip()
+        mod.duree_label = (data.get("duree_label") or "").strip()
+        mod.tags = tags
+        mod.creneaux = creneaux_norm
+        mod.statut = StatutModule.PUBLISHED
+        mod.actif = True
+        mod.save(
+            update_fields=[
+                "titre",
+                "niveau",
+                "format_seance",
+                "planning",
+                "description",
+                "duree_label",
+                "tags",
+                "creneaux",
+                "statut",
+                "actif",
+            ]
+        )
+        mod.refresh_from_db()
+        return Response(module_propose_to_frontend(mod))
 
 
 class EtudiantReservationsView(APIView):
@@ -537,3 +612,97 @@ class AvisPublicTuteurView(APIView):
             .order_by("-created_at")[:100]
         )
         return Response(EvaluationSeancePublicSerializer(qs, many=True).data)
+
+
+class SignalementSeanceCreateView(APIView):
+    """
+    POST /api/seances/<id>/signalement/ — corps : { "issue_type", "description" (optionnel) }.
+    Réservé à l’étudiant ou au tuteur de la réservation (une fois par personne et par séance).
+    Après enregistrement : la réservation passe en « annulée » (étudiant ou tuteur).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        r = get_object_or_404(
+            Reservation.objects.select_for_update()
+            .select_related("etudiant", "tuteur"),
+            pk=pk,
+        )
+        if request.user.id not in (r.etudiant_id, r.tuteur_id):
+            return Response({"detail": "Accès refusé."}, status=status.HTTP_403_FORBIDDEN)
+        if r.statut not in (StatutReservation.CONFIRMED, StatutReservation.IN_PROGRESS):
+            return Response(
+                {"detail": "Le signalement n’est possible que pour une séance confirmée et non terminée."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if SignalementSeance.objects.filter(reservation=r, auteur=request.user).exists():
+            return Response(
+                {"detail": "Vous avez déjà signalé un problème pour cette séance."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ser = SignalementCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        role_auteur = "student" if request.user.id == r.etudiant_id else "tutor"
+        sig = SignalementSeance.objects.create(
+            reservation=r,
+            auteur=request.user,
+            role_auteur=role_auteur,
+            code_motif=ser.validated_data["issue_type"],
+            description=ser.validated_data.get("description") or "",
+        )
+        reservation_cancelled = False
+        if role_auteur in ("student", "tutor"):
+            r.statut = StatutReservation.CANCELLED
+            r.save(update_fields=["statut", "updated_at"])
+            reservation_cancelled = True
+        sig = SignalementSeance.objects.select_related(
+            "reservation",
+            "reservation__etudiant",
+            "auteur",
+        ).get(pk=sig.pk)
+        out = dict(SignalementRecuSerializer(sig).data)
+        out["reservation_status"] = sig.reservation.statut
+        out["reservation_cancelled"] = reservation_cancelled
+        return Response(out, status=status.HTTP_201_CREATED)
+
+
+class SignalementsRecusTuteurView(APIView):
+    """GET /api/tuteur/signalements-recus/ — signalements sur les séances où l’utilisateur est le tuteur."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role not in (Role.TUTOR, Role.BOTH):
+            return Response(
+                {"detail": "Réservé aux comptes tuteur."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        qs = (
+            SignalementSeance.objects.filter(reservation__tuteur=user)
+            .select_related("reservation", "reservation__etudiant", "auteur")
+            .order_by("-created_at")[:200]
+        )
+        return Response(SignalementRecuSerializer(qs, many=True).data)
+
+
+class SignalementsRecusEtudiantView(APIView):
+    """GET /api/etudiant/signalements-recus/ — signalements du tuteur concernant la séance (excuses, etc.)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role not in (Role.STUDENT, Role.BOTH):
+            return Response(
+                {"detail": "Réservé aux comptes étudiant."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        qs = (
+            SignalementSeance.objects.filter(reservation__etudiant=user, role_auteur="tutor")
+            .select_related("reservation", "reservation__tuteur", "auteur")
+            .order_by("-created_at")[:200]
+        )
+        return Response(SignalementPourEtudiantSerializer(qs, many=True).data)

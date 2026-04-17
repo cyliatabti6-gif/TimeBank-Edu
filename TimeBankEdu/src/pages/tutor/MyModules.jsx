@@ -99,14 +99,14 @@ export default function MyModules() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="flex-1 text-xs border border-gray-200 text-gray-600 py-1.5 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-50 opacity-60 cursor-not-allowed"
-                  title="Bientôt disponible"
+                  onClick={() => navigate(`/tutor/modules/${mod.id}/edit`)}
+                  className="flex-1 text-xs border border-gray-200 text-gray-600 py-1.5 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-50"
                 >
                   <Edit2 size={12} /> Modifier
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate(`/modules/${mod.id}`)}
+                  onClick={() => navigate(`/tutor/modules/${mod.id}`)}
                   className="flex-1 text-xs bg-primary-50 text-primary-600 py-1.5 rounded-lg flex items-center justify-center gap-1 hover:bg-primary-100"
                 >
                   <Eye size={12} /> Voir

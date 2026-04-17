@@ -32,6 +32,7 @@ class UserAdmin(BaseUserAdmin):
                     "niveau",
                     "description",
                     "role",
+                    "modules_maitrises",
                     "balance_hours",
                     "score",
                     "tutor_review_count",

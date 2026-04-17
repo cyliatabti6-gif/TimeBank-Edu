@@ -1,5 +1,23 @@
 import { getApiBase } from './api';
 
+/** Message lisible depuis une réponse d’erreur Django REST (ex. 400). */
+function messageFromDrfError(data, fallback) {
+  if (data == null || typeof data !== 'object') return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail) && data.detail.length) return data.detail.map(String).join(' ');
+  const nfe = data.non_field_errors;
+  if (Array.isArray(nfe) && nfe.length) return nfe.map(String).join(' ');
+  const bits = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (key === 'detail') continue;
+    if (Array.isArray(val)) bits.push(`${key}: ${val.join(' ')}`);
+    else if (typeof val === 'string') bits.push(`${key}: ${val}`);
+    else if (val && typeof val === 'object') bits.push(`${key}: ${JSON.stringify(val)}`);
+  }
+  if (bits.length) return bits.join(' — ');
+  return fallback;
+}
+
 /**
  * Séances de tutorat où l’utilisateur connecté est l’étudiant (JWT).
  * @returns {Promise<Array<{ id, tutor, tutorId, module, date, time, duration, status }>>}
@@ -85,15 +103,18 @@ export async function createStudentReservation(accessToken, body) {
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const msg =
-      typeof data.detail === 'string'
-        ? data.detail
-        : typeof data.tutor === 'string'
-          ? data.tutor
-          : Array.isArray(data.tutor)
-            ? data.tutor[0]
-            : `réservation ${r.status}`;
-    throw new Error(msg);
+    const msg = messageFromDrfError(
+      data,
+      typeof data.tutor === 'string'
+        ? data.tutor
+        : Array.isArray(data.tutor)
+          ? String(data.tutor[0])
+          : `réservation ${r.status}`,
+    );
+    const err = new Error(msg);
+    err.status = r.status;
+    err.data = data;
+    throw err;
   }
   return data;
 }
@@ -129,4 +150,46 @@ export async function confirmSeanceEndOnServer(seanceId, accessToken) {
     throw err;
   }
   return data;
+}
+
+/** Signalement de problème sur une séance (étudiant ou tuteur). */
+export async function postSeanceSignalement(seanceId, accessToken, body) {
+  const base = getApiBase();
+  const r = await fetch(`${base}/api/seances/${seanceId}/signalement/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = messageFromDrfError(data, `signalement ${r.status}`);
+    const err = new Error(msg);
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+/** Signalements reçus en tant que tuteur (JWT). */
+export async function fetchTutorSignalementsRecus(accessToken) {
+  const base = getApiBase();
+  const r = await fetch(`${base}/api/tuteur/signalements-recus/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) throw new Error(`tuteur/signalements-recus ${r.status}`);
+  return r.json();
+}
+
+/** Signalements laissés par le tuteur, visibles par l’étudiant (JWT). */
+export async function fetchStudentSignalementsRecus(accessToken) {
+  const base = getApiBase();
+  const r = await fetch(`${base}/api/etudiant/signalements-recus/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) throw new Error(`etudiant/signalements-recus ${r.status}`);
+  return r.json();
 }
