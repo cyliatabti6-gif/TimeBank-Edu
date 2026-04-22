@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, GraduationCap, ArrowRight } from 'lucide-react';
 import { mapApiUserToAppUser, useApp } from '../context/AppContext';
 import { getApiBase } from '../lib/api';
+import { UNIVERSITY_EMAIL_PLACEHOLDER } from '../lib/universityEmail';
 import { defaultDashboardPath, isPlatformAdmin } from '../lib/authz';
 
 export default function Login() {
@@ -76,7 +77,7 @@ export default function Login() {
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="email"
-                  placeholder="exemple@univ.dz"
+                  placeholder={UNIVERSITY_EMAIL_PLACEHOLDER}
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   className="input-field pl-9"

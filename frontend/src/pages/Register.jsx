@@ -2,6 +2,7 @@ import { createElement, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, GraduationCap, ArrowRight, Shield, Star, CheckCircle2, TrendingUp } from 'lucide-react';
 import { getApiBase } from '../lib/api';
+import { isAlgerianUniversityEmail, UNIVERSITY_EMAIL_PLACEHOLDER } from '../lib/universityEmail';
 
 /** Version actuelle : inscription réservée au département Informatique. */
 const FILIERE_INSCRIPTION = 'Informatique';
@@ -40,6 +41,10 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setApiError('');
+    if (!isAlgerianUniversityEmail(form.email)) {
+      setApiError('Utilisez une adresse e-mail universitaire se terminant par .dz (ex. prenom.nom@univ.dz).');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${getApiBase()}/api/inscription/`, {
@@ -127,11 +132,11 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Universitaire</label>
               <div className="relative">
                 <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="email" placeholder="exemple@univ.dz" value={form.email}
+                <input type="email" placeholder={UNIVERSITY_EMAIL_PLACEHOLDER} value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
                   className="input-field pl-9" required />
               </div>
-              <p className="text-xs text-gray-400 mt-1">Utilisez votre email universitaire (.dz)</p>
+              <p className="text-xs text-gray-400 mt-1">Domaine en .dz (ex. @univ.dz, @usthb.dz)</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

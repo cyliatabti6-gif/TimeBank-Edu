@@ -4,6 +4,7 @@ import { ArrowRight, Mail, Lock, Eye, EyeOff, User, Shield, CheckCircle2, Gradua
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
 import { getApiBase } from '../lib/api';
+import { isAlgerianUniversityEmail, UNIVERSITY_EMAIL_PLACEHOLDER } from '../lib/universityEmail';
 
 const FILIERE_INSCRIPTION = 'Informatique';
 const niveaux = ['L1', 'L2', 'L3', 'M1', 'M2', 'Doctorat'];
@@ -52,6 +53,10 @@ export default function Home() {
     e.preventDefault();
     if (!accepted) {
       setApiError("Veuillez accepter les conditions d'utilisation.");
+      return;
+    }
+    if (!isAlgerianUniversityEmail(form.email)) {
+      setApiError('Utilisez une adresse e-mail universitaire se terminant par .dz (ex. prenom.nom@univ.dz).');
       return;
     }
     setApiError('');
@@ -114,7 +119,7 @@ export default function Home() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
             <div className="text-center mb-6">
               <h2 className="text-4xl font-bold text-gray-900">Créer un compte</h2>
-              <p className="text-gray-500 mt-2">Inscrivez-vous avec votre email universitaire.</p>
+              <p className="text-gray-500 mt-2">Inscrivez-vous avec votre e-mail universitaire (.dz).</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -137,8 +142,9 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Email universitaire</label>
                 <div className="relative">
                   <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input type="email" placeholder="prenom.nom@universite.fr" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field pl-9" required />
+                  <input type="email" placeholder={UNIVERSITY_EMAIL_PLACEHOLDER} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field pl-9" required />
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Ex. @univ.dz, @usthb.dz, @univ-ville.dz</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe</label>

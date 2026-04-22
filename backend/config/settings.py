@@ -154,7 +154,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"
 
-# Domaines email facultatifs (ex: univ.dz, univ-boumerdes.dz)
+# Liste blanche stricte (optionnel). Si vide, l’API accepte tout domaine se terminant par .dz (e-mail univ. algérien).
+# Ex. env : UNIVERSITY_EMAIL_DOMAINS=univ.dz,usthb.dz
 UNIVERSITY_EMAIL_DOMAINS = [
     d.strip().lower()
     for d in os.getenv("UNIVERSITY_EMAIL_DOMAINS", "").split(",")

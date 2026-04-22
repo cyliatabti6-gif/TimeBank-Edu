@@ -49,12 +49,20 @@ class InscriptionSerializer(serializers.Serializer):
         value = value.strip().lower()
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("Un compte existe déjà avec cet e-mail.")
+        domain = value.rsplit("@", 1)[-1] if "@" in value else ""
+        domain = domain.lower()
         domains = getattr(settings, "UNIVERSITY_EMAIL_DOMAINS", [])
         if domains:
-            domain = value.split("@")[-1].lower() if "@" in value else ""
             if domain not in domains:
                 raise serializers.ValidationError(
                     f"E-mail non autorisé. Domaines acceptés : {', '.join(domains)}"
+                )
+        else:
+            # Par défaut : e-mail universitaire algérien (.dz), ex. @univ.dz, @usthb.dz, @univ-blida.dz
+            if not domain.endswith(".dz"):
+                raise serializers.ValidationError(
+                    "Utilisez une adresse e-mail universitaire se terminant par .dz "
+                    "(ex. prenom.nom@univ.dz ou prenom.nom@univ-ville.dz)."
                 )
         if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value):
             raise serializers.ValidationError("Format d'e-mail invalide.")
