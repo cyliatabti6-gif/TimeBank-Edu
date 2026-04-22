@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock, Star, Users, BookOpen, ChevronRight, CheckCircle2, GraduationCap, MessageCircle, Calendar } from 'lucide-react';
 import PublicNavbar from '../components/layout/PublicNavbar';
@@ -12,6 +12,18 @@ const moduleBg = ['from-blue-50 to-blue-100', 'from-purple-50 to-purple-100', 'f
 
 export default function Home() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const sectionId = (typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '').trim();
+    if (!sectionId) return;
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    const t = setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="min-h-screen bg-white">
       <PublicNavbar />
@@ -58,11 +70,11 @@ export default function Home() {
       </section>
 
       {/* Popular Modules */}
-      <section className="py-14 px-4 bg-white">
+      <section id="modules-populaires" className="py-14 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Modules Populaires</h2>
-            <Link to="/modules" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
+            <Link to="/student/modules" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
               Voir tous les modules <ChevronRight size={16} />
             </Link>
           </div>
@@ -93,7 +105,7 @@ export default function Home() {
       </section>
 
       {/* Stats Banner */}
-      <section className="py-10 bg-primary-600">
+      <section id="a-propos" className="py-10 bg-primary-600">
         <div className="max-w-5xl mx-auto px-4 grid grid-cols-3 gap-8 text-center">
           {[{ val: '500+', label: 'Étudiants' }, { val: '1200+', label: 'Tutorats réalisés' }, { val: '4.8/5', label: 'Note moyenne' }].map((s) => (
             <div key={s.label}>
@@ -105,11 +117,11 @@ export default function Home() {
       </section>
 
       {/* Top Tutors */}
-      <section className="py-14 px-4 bg-gray-50">
+      <section id="tuteurs-mieux-notes" className="py-14 px-4 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Tuteurs les mieux notés</h2>
-            <Link to="/tuteurs" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
+            <Link to="/student/modules" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
               Voir tous les tuteurs <ChevronRight size={16} />
             </Link>
           </div>
@@ -136,7 +148,7 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section className="py-14 px-4 bg-white">
+      <section id="comment-ca-marche" className="py-14 px-4 bg-white">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-10">Comment ça marche ?</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
@@ -167,7 +179,9 @@ export default function Home() {
         </button>
       </section>
 
-      <Footer />
+      <div id="a-propos-footer">
+        <Footer />
+      </div>
     </div>
   );
 }

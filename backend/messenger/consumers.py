@@ -6,6 +6,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
+from accounts.models import Notification
 from messenger.constants import MAX_MESSAGE_LENGTH
 from messenger.models import Conversation, Message
 from messenger.permissions import user_is_conversation_participant
@@ -23,7 +24,19 @@ def _get_conversation(cid: int):
 
 @database_sync_to_async
 def _create_message(conv: Conversation, user, text: str) -> Message:
-    return Message.objects.create(conversation=conv, sender=user, text=text)
+    msg = Message.objects.create(conversation=conv, sender=user, text=text)
+    recipients = conv.participants.exclude(pk=user.pk).only("id")
+    Notification.objects.bulk_create(
+        [
+            Notification(
+                user=recipient,
+                type="message",
+                text=f"{user.name} vous a envoyé un message.",
+            )
+            for recipient in recipients
+        ]
+    )
+    return msg
 
 
 @database_sync_to_async

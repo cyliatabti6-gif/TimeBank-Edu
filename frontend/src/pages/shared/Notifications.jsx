@@ -8,7 +8,7 @@ const notifIcons = { request: '📋', confirmed: '✅', message: '💬', reminde
 const notifColors = { request: 'bg-blue-100', confirmed: 'bg-green-100', message: 'bg-purple-100', reminder: 'bg-yellow-100', evaluation: 'bg-orange-100' };
 
 export default function Notifications() {
-  const { notifications, markNotifRead } = useApp();
+  const { notifications, markNotifRead, markAllRead } = useApp();
 
   return (
     <DashboardLayout>
@@ -16,7 +16,11 @@ export default function Notifications() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
         </div>
-        <button className="text-sm text-primary-600 border border-primary-200 px-3 py-1.5 rounded-lg hover:bg-primary-50 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => markAllRead()}
+          className="text-sm text-primary-600 border border-primary-200 px-3 py-1.5 rounded-lg hover:bg-primary-50 flex items-center gap-1"
+        >
           <Check size={14} /> Tout marquer comme lu
         </button>
       </div>

@@ -15,6 +15,7 @@ from .models import (
     FormatSeance,
     ModulePropose,
     Niveau,
+    Notification,
     Reservation,
     StatutModule,
     StatutReservation,
@@ -34,6 +35,7 @@ from .serializers import (
     SeanceDetailSerializer,
     SeanceEtudiantSerializer,
     SeanceMeetUrlPatchSerializer,
+    NotificationSerializer,
     UserLectureSerializer,
     module_propose_to_frontend,
 )
@@ -405,8 +407,46 @@ class SeanceAccepterTuteurView(APIView):
             )
         r.statut = StatutReservation.CONFIRMED
         r.save(update_fields=["statut", "updated_at"])
+        Notification.objects.create(
+            user=r.etudiant,
+            type="confirmed",
+            text=f"Votre séance avec {r.tuteur.name} a été confirmée.",
+        )
         r.refresh_from_db()
         return Response(SeanceDetailSerializer(r, context={"request": request}).data)
+
+
+class NotificationListView(APIView):
+    """GET /api/notifications/ — notifications de l’utilisateur connecté."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = Notification.objects.filter(user=request.user).order_by("-created_at")
+        return Response(NotificationSerializer(qs, many=True).data)
+
+
+class NotificationMarkAllReadView(APIView):
+    """PATCH /api/notifications/read-all/ — marquer tout comme lu."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({"detail": "ok"}, status=status.HTTP_200_OK)
+
+
+class NotificationMarkReadView(APIView):
+    """PATCH /api/notifications/<id>/read/ — marquer une notification comme lue."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, pk):
+        n = get_object_or_404(Notification, pk=pk, user=request.user)
+        if not n.is_read:
+            n.is_read = True
+            n.save(update_fields=["is_read"])
+        return Response(NotificationSerializer(n).data, status=status.HTTP_200_OK)
 
 
 class MesSeancesEtudiantView(APIView):

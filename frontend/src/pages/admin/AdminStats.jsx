@@ -1,19 +1,33 @@
+import { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend, PieChart, Pie, Cell } from 'recharts';
 import DashboardLayout from '../../components/layout/DashboardLayout';
+import { fetchAdminStats } from '../../lib/adminApi';
 
-const monthlyData = [
-  { month: 'Jan', utilisateurs: 80, tutorats: 20 }, { month: 'Fév', utilisateurs: 90, tutorats: 30 },
-  { month: 'Mar', utilisateurs: 95, tutorats: 40 }, { month: 'Avr', utilisateurs: 105, tutorats: 50 },
-  { month: 'Mai', utilisateurs: 120, tutorats: 45 },
-];
-const hoursData = [
-  { month: 'Jan', heures: 50 }, { month: 'Fév', heures: 80 }, { month: 'Mar', heures: 110 },
-  { month: 'Avr', heures: 180 }, { month: 'Mai', heures: 220 }, { month: 'Juin', heures: 320 },
-];
-const roleData = [{ name: 'Étudiants', value: 85 }, { name: 'Tuteurs', value: 30 }, { name: 'Admins', value: 5 }];
 const COLORS = ['#0d9488', '#3b82f6', '#f97316'];
 
 export default function AdminStats() {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const data = await fetchAdminStats();
+      if (!cancelled) setStats(data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const monthlyData = useMemo(() => stats?.monthly || [], [stats]);
+  const hoursData = useMemo(
+    () => monthlyData.map((x) => ({ month: x.month, heures: x.heures })),
+    [monthlyData],
+  );
+  const roleData = stats?.roleData || [];
+  const top = stats?.topModules || [];
+  const kpis = stats?.kpis || { users: 0, modules: 0, hours: 0, satisfaction: 0 };
+
   return (
     <DashboardLayout>
       <div className="mb-6">
@@ -23,10 +37,10 @@ export default function AdminStats() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Utilisateurs total', val: '120', trend: '+12 ce mois', color: 'text-primary-600' },
-          { label: 'Modules actifs', val: '45', trend: '+8 ce mois', color: 'text-blue-600' },
-          { label: 'Heures échangées', val: '320h', trend: '+24h', color: 'text-purple-600' },
-          { label: 'Satisfaction', val: '92%', trend: '+3%', color: 'text-green-600' },
+          { label: 'Utilisateurs total', val: String(kpis.users), trend: 'Données live', color: 'text-primary-600' },
+          { label: 'Modules actifs', val: String(kpis.modules), trend: 'Données live', color: 'text-blue-600' },
+          { label: 'Heures échangées', val: `${kpis.hours}h`, trend: 'Données live', color: 'text-purple-600' },
+          { label: 'Satisfaction', val: `${kpis.satisfaction}%`, trend: 'Données live', color: 'text-green-600' },
         ].map(s => (
           <div key={s.label} className="card">
             <p className="text-xs text-gray-500">{s.label}</p>
@@ -69,18 +83,13 @@ export default function AdminStats() {
         <div className="card lg:col-span-2">
           <h3 className="font-semibold text-gray-800 mb-4 text-sm">Top Tuteurs par Heures Données</h3>
           <div className="space-y-3">
-            {[
-              { name: 'Ahmed Moussa', hours: 45, sessions: 23 },
-              { name: 'Yassine K.', hours: 38, sessions: 31 },
-              { name: 'Lina Farah', hours: 30, sessions: 15 },
-              { name: 'Fatima Zahra', hours: 25, sessions: 18 },
-            ].map(t => (
+            {top.map(t => (
               <div key={t.name} className="flex items-center gap-3">
                 <span className="text-sm text-gray-700 w-32">{t.name}</span>
                 <div className="flex-1 bg-gray-100 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: `${(t.hours / 45) * 100}%` }} />
+                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: `${(t.sessions / (top[0]?.sessions || 1)) * 100}%` }} />
                 </div>
-                <span className="text-xs text-gray-500 w-16 text-right">{t.hours}h • {t.sessions} séances</span>
+                <span className="text-xs text-gray-500 w-16 text-right">{t.sessions} séances</span>
               </div>
             ))}
           </div>

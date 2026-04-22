@@ -4,6 +4,7 @@ import { resolveAvatarSrc } from '../lib/avatarUrl';
 import { getApiBase } from '../lib/api';
 import { clearTokens, getAccessToken, saveTokens } from '../lib/authStorage';
 import { fetchStudentReservationsFromServer, fetchTutorIncomingReservations } from '../lib/seancesApi';
+import { fetchNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/notificationsApi';
 
 const AppContext = createContext(null);
 
@@ -328,19 +329,35 @@ function mapApiDetailToReservation(detail) {
   });
 }
 
-export const mockNotifications = [
-  { id: 1, type: 'request', text: 'Ali Karim a demandé une session de Base de Données.', time: 'Il y a 2 min', read: false },
-  { id: 2, type: 'confirmed', text: 'Votre session avec Lina Farah a été confirmée.', time: 'Il y a 30 min', read: false },
-  { id: 3, type: 'message', text: 'Ahmed Moussa vous a envoyé un message.', time: 'Il y a 1h', read: true },
-  { id: 4, type: 'reminder', text: 'Rappel de session : Votre session débute dans 1 heure.', time: 'Il y a 2h', read: true },
-  { id: 5, type: 'evaluation', text: 'Sara Benali a évalué votre tutorat.', time: 'Il y a 1 jour', read: true },
-];
+function toRelativeTime(value) {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) return 'just now';
+  const seconds = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function mapApiNotificationToUi(n) {
+  return {
+    id: n.id,
+    type: n.type,
+    text: n.text,
+    read: Boolean(n.is_read),
+    time: toRelativeTime(n.created_at),
+    created_at: n.created_at,
+  };
+}
 
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState([]);
   const [reservations, setReservations] = useState(() => []);
 
   /** Solde : toujours celui renvoyé par l’API (/auth/me/), jamais ajusté en local. */
@@ -531,6 +548,7 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     clearTokens();
     setCurrentUser(null);
+    setNotifications([]);
     setReservations([]);
     clearReservationLocalStorageKeys();
   }, []);
@@ -541,6 +559,17 @@ export function AppProvider({ children }) {
     saveTokens(payload.access, payload.refresh);
     setCurrentUser(mapApiUserToAppUser(payload.user));
   }, []);
+
+  const syncNotificationsWithServer = useCallback(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      const rows = await fetchNotifications(token);
+      setNotifications(Array.isArray(rows) ? rows.map(mapApiNotificationToUi) : []);
+    } catch (e) {
+      if (e?.status === 401) logout();
+    }
+  }, [logout]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -571,11 +600,38 @@ export function AppProvider({ children }) {
       return;
     }
     void syncReservationsWithServer();
-  }, [bootstrapping, currentUser?.id, currentUser?.is_student, currentUser?.is_tutor, syncReservationsWithServer]);
+  }, [bootstrapping, currentUser, currentUser?.id, currentUser?.is_student, currentUser?.is_tutor, syncReservationsWithServer]);
 
-  const markNotifRead = (id) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  };
+  useEffect(() => {
+    if (bootstrapping) return;
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+    void syncNotificationsWithServer();
+  }, [bootstrapping, currentUser, currentUser?.id, syncNotificationsWithServer]);
+
+  const markNotifRead = useCallback(async (id) => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await markNotificationRead(token, id);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    } catch (e) {
+      if (e?.status === 401) logout();
+    }
+  }, [logout]);
+
+  const markAllRead = useCallback(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await markAllNotificationsRead(token);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (e) {
+      if (e?.status === 401) logout();
+    }
+  }, [logout]);
 
   return (
     <AppContext.Provider
@@ -589,6 +645,8 @@ export function AppProvider({ children }) {
         setDarkMode,
         notifications,
         markNotifRead,
+        markAllRead,
+        syncNotificationsWithServer,
         reservations,
         addReservation,
         upsertReservationFromApiDetail,

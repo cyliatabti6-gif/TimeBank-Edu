@@ -1,26 +1,43 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Filter } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import Avatar from '../../components/common/Avatar';
-
-const disputes = [
-  { id: 1, title: 'Absence non justifiée', desc: 'Signalé par Ali Karim contre Ahmed Moussa', sub: 'Séance du 15/05/2024 - 18h', time: 'Il y a 30 min', status: 'En attente', statusCls: 'badge-orange' },
-  { id: 2, title: 'Problème de comportement', desc: 'Signalé par Fatima Zahra contre Yassine K.', sub: 'Séance du 14/05/2024 - 10h', time: 'Il y a 2h', status: 'En cours', statusCls: 'badge-blue' },
-  { id: 3, title: 'Annulation abusive', desc: 'Signalé par Lina Farah contre Ali Karim', sub: 'Séance du 10/05/2024 - 9h', time: 'Il y a 7 jours', status: 'Résolu', statusCls: 'badge-green' },
-  { id: 4, title: 'Litige de paiement d\'heures', desc: 'Signalé par Sara Benali contre Ahmed Moussa', sub: 'Séance du 09/05/2024 - 10h', time: 'Il y a 2 jours', status: 'En cours', statusCls: 'badge-blue' },
-];
+import { fetchAdminDisputes, patchAdminDispute } from '../../lib/adminApi';
 
 const tabs = ['Tous', 'En attente', 'En cours', 'Résolus'];
 
 export default function AdminDisputes() {
   const [activeTab, setActiveTab] = useState('Tous');
+  const [disputes, setDisputes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = disputes.filter(d => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchAdminDisputes();
+        if (!cancelled) setDisputes(Array.isArray(rows) ? rows : []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => disputes.filter(d => {
     if (activeTab === 'En attente') return d.status === 'En attente';
     if (activeTab === 'En cours') return d.status === 'En cours';
     if (activeTab === 'Résolus') return d.status === 'Résolu';
     return true;
-  });
+  }), [disputes, activeTab]);
+
+  const markInProgress = async (d) => {
+    const nextStatus = d.status === 'En attente' ? 'in_progress' : 'resolved';
+    const updated = await patchAdminDispute(d.id, { status: nextStatus });
+    setDisputes((prev) => prev.map((row) => (row.id === d.id ? updated : row)));
+  };
 
   return (
     <DashboardLayout>
@@ -42,7 +59,10 @@ export default function AdminDisputes() {
       </div>
 
       <div className="space-y-3">
-        {filtered.map(d => (
+        {loading && (
+          <div className="card text-gray-500 text-sm">Chargement...</div>
+        )}
+        {!loading && filtered.map(d => (
           <div key={d.id} className="card hover:shadow-md transition-all">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -57,8 +77,8 @@ export default function AdminDisputes() {
                 <p className="text-xs text-gray-400 mt-1">{d.sub} • {d.time}</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
-                <button className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg hover:bg-primary-100 font-medium">Traiter</button>
-                <button className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium">Détails</button>
+                <button type="button" onClick={() => markInProgress(d)} className="text-xs bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg hover:bg-primary-100 font-medium">Traiter</button>
+                <button type="button" className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium">Détails</button>
               </div>
             </div>
           </div>

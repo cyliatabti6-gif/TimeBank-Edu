@@ -1,6 +1,7 @@
-import { createElement, useState } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { Save, Settings, Shield, Bell, Globe, Wrench } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
+import { fetchAdminSettings, patchAdminSettings } from '../../lib/adminApi';
 
 const settingsTabs = [
   { id: 'general', label: 'Général', icon: Globe },
@@ -23,6 +24,30 @@ export default function AdminSettings() {
     initialTutorScore: '5',
     minSessionDuration: '1 heure',
   });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await fetchAdminSettings();
+        if (!cancelled && data) {
+          setForm((prev) => ({ ...prev, ...data }));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const save = async () => {
+    const saved = await patchAdminSettings(form);
+    setForm((prev) => ({ ...prev, ...saved }));
+  };
 
   return (
     <DashboardLayout>
@@ -107,7 +132,8 @@ export default function AdminSettings() {
             </div>
           )}
 
-          <button className="btn-primary py-3 px-6">
+          {loading && <div className="text-sm text-gray-500">Chargement...</div>}
+          <button type="button" onClick={save} className="btn-primary py-3 px-6">
             <Save size={16} /> Enregistrer les modifications
           </button>
         </div>

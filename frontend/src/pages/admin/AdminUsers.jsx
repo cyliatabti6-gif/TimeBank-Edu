@@ -1,21 +1,73 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Filter, MoreHorizontal } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
-
-const users = [
-  { id: 1, name: 'Sara Benali', role: 'Étudiant', status: 'Actif', date: '15/03/2024', avatar: 'SB' },
-  { id: 2, name: 'Ahmed Moussa', role: 'Tuteur', status: 'Actif', date: '01/02/2024', avatar: 'AM' },
-  { id: 3, name: 'Ali Karim', role: 'Étudiant', status: 'Actif', date: '05/01/2024', avatar: 'AK' },
-  { id: 4, name: 'Fatima Zahra', role: 'Tuteur', status: 'Suspendu', date: '20/01/2024', avatar: 'FZ' },
-  { id: 5, name: 'Yassine K.', role: 'Tuteur', status: 'Actif', date: '12/03/2024', avatar: 'YK' },
-  { id: 6, name: 'Lina Farah', role: 'Étudiant', status: 'Actif', date: '18/02/2024', avatar: 'LF' },
-];
+import { createAdminUser, fetchAdminUsers, patchAdminUser } from '../../lib/adminApi';
 
 export default function AdminUsers() {
   const [search, setSearch] = useState('');
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()));
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const rows = await fetchAdminUsers();
+      setUsers(Array.isArray(rows) ? rows : []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchAdminUsers();
+        if (!cancelled) setUsers(Array.isArray(rows) ? rows : []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () => users.filter((u) => u.name.toLowerCase().includes(search.toLowerCase())),
+    [users, search],
+  );
+
+  const stats = useMemo(() => {
+    const total = users.length;
+    const students = users.filter((u) => u.role === 'Étudiant').length;
+    const tutors = users.filter((u) => u.role === 'Tuteur').length;
+    const suspended = users.filter((u) => u.status !== 'Actif').length;
+    return { total, students, tutors, suspended };
+  }, [users]);
+
+  const toggleStatus = async (u) => {
+    const nextActive = u.status !== 'Actif';
+    await patchAdminUser(u.id, { is_active: nextActive });
+    setUsers((prev) =>
+      prev.map((row) => (row.id === u.id ? { ...row, status: nextActive ? 'Actif' : 'Suspendu' } : row)),
+    );
+  };
+
+  const addUser = async () => {
+    const seed = Date.now().toString().slice(-6);
+    await createAdminUser({
+      name: `Utilisateur ${seed}`,
+      email: `user${seed}@univ.dz`,
+      filiere: 'Informatique',
+      niveau: 'L1',
+      is_student: true,
+      is_tutor: false,
+      password: 'ChangeMe123!',
+    });
+    await loadUsers();
+  };
 
   return (
     <DashboardLayout>
@@ -24,7 +76,7 @@ export default function AdminUsers() {
           <h1 className="text-xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
           <p className="text-gray-500 text-sm">Gérez les comptes des étudiants et tuteurs.</p>
         </div>
-        <button className="btn-primary text-sm py-2 px-4">
+        <button type="button" onClick={addUser} className="btn-primary text-sm py-2 px-4">
           <Plus size={15} /> Ajouter
         </button>
       </div>
@@ -53,7 +105,12 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(u => (
+              {loading && (
+                <tr>
+                  <td className="px-4 py-4 text-gray-500" colSpan={5}>Chargement...</td>
+                </tr>
+              )}
+              {!loading && filtered.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -69,7 +126,7 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">{u.date}</td>
                   <td className="px-4 py-3">
-                    <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center">
+                    <button type="button" onClick={() => toggleStatus(u)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center" title="Basculer statut">
                       <MoreHorizontal size={16} className="text-gray-400" />
                     </button>
                   </td>
@@ -79,7 +136,7 @@ export default function AdminUsers() {
           </table>
         </div>
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 grid grid-cols-4 gap-4 text-center text-xs">
-          {[{ val: '120', label: 'Utilisateurs', color: 'text-gray-800' }, { val: '65', label: 'Étudiants', color: 'text-primary-600' }, { val: '55', label: 'Tuteurs', color: 'text-blue-600' }, { val: '3', label: 'Suspendus', color: 'text-red-500' }].map(s => (
+          {[{ val: String(stats.total), label: 'Utilisateurs', color: 'text-gray-800' }, { val: String(stats.students), label: 'Étudiants', color: 'text-primary-600' }, { val: String(stats.tutors), label: 'Tuteurs', color: 'text-blue-600' }, { val: String(stats.suspended), label: 'Suspendus', color: 'text-red-500' }].map(s => (
             <div key={s.label}>
               <p className={`text-lg font-bold ${s.color}`}>{s.val}</p>
               <p className="text-gray-400">{s.label}</p>

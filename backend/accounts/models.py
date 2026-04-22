@@ -236,6 +236,99 @@ class Reservation(models.Model):
         super().save(*args, **kwargs)
 
 
+class Notification(models.Model):
+    """Notification utilisateur (persistée en base)."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    type = models.CharField(max_length=50)
+    text = models.CharField(max_length=255)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read"]),
+            models.Index(fields=["user", "-created_at"]),
+        ]
+        verbose_name = "notification"
+        verbose_name_plural = "notifications"
+
+    def __str__(self):
+        return f"{self.user_id}::{self.type}::{self.text[:40]}"
+
+
+class DisputeStatus(models.TextChoices):
+    PENDING = "pending", "En attente"
+    IN_PROGRESS = "in_progress", "En cours"
+    RESOLVED = "resolved", "Résolu"
+
+
+class Dispute(models.Model):
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    reporter = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reported_disputes",
+    )
+    target = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="targeted_disputes",
+    )
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="disputes",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=DisputeStatus.choices,
+        default=DisputeStatus.PENDING,
+    )
+    resolution_note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "litige"
+        verbose_name_plural = "litiges"
+
+    def __str__(self):
+        return f"{self.title} ({self.status})"
+
+
+class PlatformSettings(models.Model):
+    platform_name = models.CharField(max_length=120, default="TimeBank Edu")
+    contact_email = models.EmailField(default="contact@timebankEdu.dz")
+    timezone_label = models.CharField(max_length=80, default="UTC+01:00 Alger")
+    hours_given_label = models.CharField(max_length=20, default="1h")
+    hours_received_label = models.CharField(max_length=20, default="1h")
+    initial_student_balance = models.DecimalField(max_digits=5, decimal_places=2, default=2)
+    initial_tutor_score = models.DecimalField(max_digits=4, decimal_places=2, default=5)
+    min_session_duration_label = models.CharField(max_length=40, default="1 heure")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "paramètre plateforme"
+        verbose_name_plural = "paramètres plateforme"
+
+    def __str__(self):
+        return "Paramètres plateforme"
+
+
 class EvaluationSeance(models.Model):
     """Avis laissé par l’étudiant après une séance (réservation terminée)."""
 

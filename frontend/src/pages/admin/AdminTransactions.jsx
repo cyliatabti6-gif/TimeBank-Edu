@@ -1,28 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Filter } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
-
-const transactions = [
-  { id: 1234, date: '15/05/2024', from: 'Ahmed Moussa', fromAvatar: 'AM', to: 'Sara Benali', toAvatar: 'SB', hours: 2, session: '#1234', type: 'Donnée' },
-  { id: 1235, date: '15/05/2024', from: 'Sara Benali', fromAvatar: 'SB', to: 'Ahmed Moussa', toAvatar: 'AM', hours: 2, session: '#1234', type: 'Reçue' },
-  { id: 1236, date: '14/05/2024', from: 'Lina Farah', fromAvatar: 'LF', to: 'Ali Karim', toAvatar: 'AK', hours: 1, session: '#1233', type: 'Donnée' },
-  { id: 1237, date: '14/05/2024', from: 'Ali Karim', fromAvatar: 'AK', to: 'Lina Farah', toAvatar: 'LF', hours: 1, session: '#1233', type: 'Reçue' },
-  { id: 1238, date: '13/05/2024', from: 'Yassine K.', fromAvatar: 'YK', to: 'Fatima Zahra', toAvatar: 'FZ', hours: 2, session: '#1232', type: 'Donnée' },
-  { id: 1239, date: '13/05/2024', from: 'Fatima Zahra', fromAvatar: 'FZ', to: 'Yassine K.', toAvatar: 'YK', hours: 2, session: '#1232', type: 'Reçue' },
-];
+import { fetchAdminTransactions } from '../../lib/adminApi';
 
 const tabs = ['Toutes', 'Données', 'Reçues'];
 
 export default function AdminTransactions() {
   const [activeTab, setActiveTab] = useState('Toutes');
   const [search, setSearch] = useState('');
+  const [transactions, setTransactions] = useState([]);
+  const [summary, setSummary] = useState({ total_hours: 0, given_hours: 0, received_hours: 0, open_disputes: 0 });
+  const [loading, setLoading] = useState(true);
 
-  const filtered = transactions.filter(t => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await fetchAdminTransactions();
+        if (cancelled) return;
+        setTransactions(Array.isArray(data?.items) ? data.items : []);
+        setSummary(data?.summary || { total_hours: 0, given_hours: 0, received_hours: 0, open_disputes: 0 });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => transactions.filter(t => {
     if (activeTab === 'Données') return t.type === 'Donnée';
     if (activeTab === 'Reçues') return t.type === 'Reçue';
     return true;
-  });
+  }).filter((t) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      t.from.toLowerCase().includes(q) ||
+      t.to.toLowerCase().includes(q) ||
+      String(t.session).toLowerCase().includes(q)
+    );
+  }), [transactions, activeTab, search]);
 
   return (
     <DashboardLayout>
@@ -56,7 +77,12 @@ export default function AdminTransactions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(t => (
+              {loading && (
+                <tr>
+                  <td className="px-4 py-4 text-gray-500" colSpan={6}>Chargement...</td>
+                </tr>
+              )}
+              {!loading && filtered.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-gray-500">{t.date}</td>
                   <td className="px-4 py-3">
@@ -82,8 +108,8 @@ export default function AdminTransactions() {
           </table>
         </div>
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between text-sm text-gray-500">
-          <span>Total échangé: <span className="font-bold text-primary-600">320h</span></span>
-          <span>Données: <span className="font-semibold text-green-600">160h (50%)</span> | Reçues: <span className="font-semibold text-blue-600">160h (50%)</span> | Litiges ouverts: <span className="text-red-500">0</span></span>
+          <span>Total échangé: <span className="font-bold text-primary-600">{summary.total_hours}h</span></span>
+          <span>Données: <span className="font-semibold text-green-600">{summary.given_hours}h</span> | Reçues: <span className="font-semibold text-blue-600">{summary.received_hours}h</span> | Litiges ouverts: <span className="text-red-500">{summary.open_disputes}</span></span>
         </div>
       </div>
     </DashboardLayout>

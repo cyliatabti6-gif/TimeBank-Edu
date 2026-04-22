@@ -18,6 +18,7 @@ from .models import (
     FormatSeance,
     ModulePropose,
     Niveau,
+    Notification,
     PlatformRole,
     Reservation,
     StatutModule,
@@ -182,6 +183,13 @@ class ProfilMiseAJourSerializer(serializers.ModelSerializer):
             except OSError:
                 pass
         return super().update(instance, validated_data)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ("id", "type", "text", "is_read", "created_at")
+        read_only_fields = fields
 
 
 def module_propose_to_frontend(instance: ModulePropose, request=None) -> dict:
@@ -440,6 +448,11 @@ class ReservationDemandeCreateSerializer(serializers.Serializer):
             )
             r.full_clean()
             r.save()
+            Notification.objects.create(
+                user=tutor,
+                type="request",
+                text=f"{request.user.name} a demandé une séance de {r.module_titre}.",
+            )
         return r
 
 
