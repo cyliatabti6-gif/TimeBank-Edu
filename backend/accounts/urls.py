@@ -35,8 +35,11 @@ from .views import (
     SeanceConfirmerFinView,
     SeanceDetailView,
     SeanceMeetUrlView,
+    ReportDisputeView,
+    StudentDisputesView,
     TuteurModuleDetailView,
     TuteurModulesView,
+    TutorDisputesView,
     TuteurReservationsRecuesView,
 )
 
@@ -72,6 +75,9 @@ urlpatterns = [
     path("seances/<int:pk>/meet-url/", SeanceMeetUrlView.as_view(), name="seance-meet-url"),
     path("seances/<int:pk>/", SeanceDetailView.as_view(), name="seance-detail"),
     path("seances/", MesSeancesEtudiantView.as_view(), name="seances-etudiant"),
+    path("disputes/report/", ReportDisputeView.as_view(), name="disputes-report"),
+    path("tuteur/disputes/", TutorDisputesView.as_view(), name="tuteur-disputes"),
+    path("etudiant/disputes/", StudentDisputesView.as_view(), name="etudiant-disputes"),
     path("admin/users/", AdminUsersView.as_view(), name="admin-users"),
     path("admin/users/<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("admin/modules/", AdminModulesView.as_view(), name="admin-modules"),

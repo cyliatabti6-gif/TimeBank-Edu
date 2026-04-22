@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Clock,
   Star,
@@ -18,6 +18,8 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
 import { useApp } from '../../context/AppContext';
+import { getAccessToken } from '../../lib/authStorage';
+import { fetchStudentDisputes, fetchTutorDisputes } from '../../lib/disputesApi';
 import { stripCreneauLabelForDisplay } from '../../lib/reservationHelpers';
 import { parseDateLabelToLocalDate, statusPlanningLabel } from '../../lib/planningUtils';
 
@@ -101,9 +103,18 @@ function reservationSortWeight(status) {
 export default function GlobalStudentTutorDashboard() {
   const { currentUser, reservations, displayBalance, updateReservationStatus } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const isStudent = Boolean(currentUser?.is_student);
   const isTutor = Boolean(currentUser?.is_tutor);
+  const inStudentArea = location.pathname.startsWith('/student');
+  const inTutorArea = location.pathname.startsWith('/tutor');
+  const showStudent = inStudentArea ? true : isStudent && !inTutorArea;
+  const showTutor = inTutorArea ? true : isTutor && !inStudentArea;
+  const [tutorDisputes, setTutorDisputes] = useState([]);
+  const [disputesLoading, setDisputesLoading] = useState(false);
+  const [studentDisputes, setStudentDisputes] = useState([]);
+  const [studentDisputesLoading, setStudentDisputesLoading] = useState(false);
 
   const rating = useMemo(() => {
     const raw = Number(currentUser?.rating ?? currentUser?.score);
@@ -113,9 +124,9 @@ export default function GlobalStudentTutorDashboard() {
   const tutorTid = currentUser?.id;
 
   const tutorReservationsMine = useMemo(() => {
-    if (!isTutor || tutorTid == null) return [];
+    if (!showTutor || tutorTid == null) return [];
     return reservations.filter((r) => Number(r.tutorId) === Number(tutorTid));
-  }, [reservations, tutorTid, isTutor]);
+  }, [reservations, tutorTid, showTutor]);
 
   const tutorHoursGivenTotal = useMemo(() => {
     return tutorReservationsMine
@@ -147,16 +158,16 @@ export default function GlobalStudentTutorDashboard() {
 
   const studentUpcomingSessions = useMemo(() => {
     const uid = currentUser?.id;
-    if (uid == null || !isStudent) return [];
+    if (uid == null || !showStudent) return [];
     return [...reservations]
       .filter((r) => sameUserId(r.studentId, uid) && r.status === 'confirmed')
       .sort((a, b) => b.id - a.id)
       .slice(0, 4);
-  }, [reservations, currentUser?.id, isStudent]);
+  }, [reservations, currentUser?.id, showStudent]);
 
   const tutorRecentIncoming = useMemo(() => {
     const uid = currentUser?.id;
-    if (uid == null || !isTutor) return [];
+    if (uid == null || !showTutor) return [];
     return [...reservations]
       .filter((r) => Number(r.tutorId) === Number(uid))
       .sort((a, b) => {
@@ -166,11 +177,11 @@ export default function GlobalStudentTutorDashboard() {
         return b.id - a.id;
       })
       .slice(0, 4);
-  }, [reservations, currentUser?.id, isTutor]);
+  }, [reservations, currentUser?.id, showTutor]);
 
   const tutorPlanningPreview = useMemo(() => {
     const uid = currentUser?.id;
-    if (uid == null || !isTutor) return [];
+    if (uid == null || !showTutor) return [];
     const mine = reservations.filter((r) => Number(r.tutorId) === Number(uid));
     const scored = mine
       .filter((r) => r.status !== 'cancelled')
@@ -182,19 +193,73 @@ export default function GlobalStudentTutorDashboard() {
       .sort((a, b) => a.t - b.t)
       .slice(0, 3);
     return scored.map((x) => x.r);
-  }, [reservations, currentUser?.id, isTutor]);
+  }, [reservations, currentUser?.id, showTutor]);
+
+  useEffect(() => {
+    if (!showTutor) {
+      setTutorDisputes([]);
+      return;
+    }
+    const token = getAccessToken();
+    if (!token) {
+      setTutorDisputes([]);
+      return;
+    }
+    let alive = true;
+    setDisputesLoading(true);
+    fetchTutorDisputes(token)
+      .then((rows) => {
+        if (alive) setTutorDisputes(rows.slice(0, 4));
+      })
+      .catch(() => {
+        if (alive) setTutorDisputes([]);
+      })
+      .finally(() => {
+        if (alive) setDisputesLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [showTutor, currentUser?.id]);
+
+  useEffect(() => {
+    if (!showStudent) {
+      setStudentDisputes([]);
+      return;
+    }
+    const token = getAccessToken();
+    if (!token) {
+      setStudentDisputes([]);
+      return;
+    }
+    let alive = true;
+    setStudentDisputesLoading(true);
+    fetchStudentDisputes(token)
+      .then((rows) => {
+        if (alive) setStudentDisputes(rows.slice(0, 4));
+      })
+      .catch(() => {
+        if (alive) setStudentDisputes([]);
+      })
+      .finally(() => {
+        if (alive) setStudentDisputesLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [showStudent, currentUser?.id]);
 
   const firstName = currentUser?.name?.split(' ')[0] || '';
 
   const subtitle = (() => {
-    if (isStudent && !isTutor) return "Prête à apprendre aujourd'hui ?";
-    if (isTutor && !isStudent) return 'Voici un résumé de ton activité.';
-    if (isStudent && isTutor) return 'Voici un aperçu de ton activité.';
+    if (showStudent && !showTutor) return "Prête à apprendre aujourd'hui ?";
+    if (showTutor && !showStudent) return 'Voici un résumé de ton activité.';
+    if (showStudent && showTutor) return 'Voici un aperçu de ton activité.';
     return '';
   })();
 
   const statsGridClass =
-    isStudent && isTutor ? 'grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6' : 'grid grid-cols-3 gap-4 mb-6';
+    showStudent && showTutor ? 'grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6' : 'grid grid-cols-3 gap-4 mb-6';
 
   return (
     <DashboardLayout>
@@ -214,12 +279,12 @@ export default function GlobalStudentTutorDashboard() {
           <div className="text-2xl font-bold text-primary-700">
             {displayBalance != null ? displayBalance : currentUser?.balance ?? 0}h
           </div>
-          {isTutor ? (
+          {showTutor ? (
             <p className="text-xs text-green-600 mt-1">
               +{tutorHoursThisWeek}h cette semaine
             </p>
           ) : null}
-          {isStudent ? (
+          {showStudent ? (
             <button type="button" className="text-xs text-primary-600 font-medium flex items-center gap-0.5 mt-1 hover:underline">
               <Plus size={12} /> Ajouter
             </button>
@@ -241,7 +306,7 @@ export default function GlobalStudentTutorDashboard() {
           </div>
         </div>
 
-        {isStudent ? (
+        {showStudent ? (
           <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
             <div className="flex items-center gap-2 mb-1">
               <BookOpen size={16} className="text-purple-600" />
@@ -252,7 +317,7 @@ export default function GlobalStudentTutorDashboard() {
           </div>
         ) : null}
 
-        {isTutor ? (
+        {showTutor ? (
           <div className="card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
             <div className="flex items-center gap-2 mb-1">
               <BookOpen size={16} className="text-blue-600" />
@@ -264,7 +329,7 @@ export default function GlobalStudentTutorDashboard() {
         ) : null}
       </div>
 
-      {isStudent ? (
+      {showStudent ? (
         <div className="grid grid-cols-2 gap-4 mb-6">
           <button type="button" onClick={() => navigate('/student/modules')} className="btn-primary py-3 text-sm">
             <Search size={16} /> Trouver un Module
@@ -275,7 +340,7 @@ export default function GlobalStudentTutorDashboard() {
         </div>
       ) : null}
 
-      {isTutor ? (
+      {showTutor ? (
         <div className="mb-6">
           <button type="button" onClick={() => navigate('/tutor/demandes')} className="btn-primary py-3 text-sm w-full sm:w-auto">
             <Inbox size={16} /> Gérer mes demandes
@@ -283,8 +348,68 @@ export default function GlobalStudentTutorDashboard() {
         </div>
       ) : null}
 
-      {isStudent ? (
+      {showTutor ? (
+        <div className="card mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900">Signalements étudiants</h2>
+            <button type="button" onClick={() => navigate('/admin/litiges')} className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+              Voir tout <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="space-y-3">
+            {disputesLoading ? (
+              <p className="text-sm text-gray-400 py-4 text-center">Chargement des signalements…</p>
+            ) : null}
+            {!disputesLoading && tutorDisputes.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">Aucun signalement pour le moment.</p>
+            ) : null}
+            {!disputesLoading &&
+              tutorDisputes.map((d) => (
+                <div key={d.id} className="p-3 rounded-xl border border-gray-100">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-800 truncate">{d.title}</p>
+                    <span className={d.status_key === 'pending' ? 'badge-orange' : d.status_key === 'in_progress' ? 'badge-blue' : 'badge-green'}>{d.status}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Par {d.reporterName} • {d.module || 'Séance'} {d.date ? `• ${d.date}` : ''}
+                  </p>
+                  {d.cause ? <p className="text-xs text-gray-600 mt-1">Cause: {d.cause}</p> : null}
+                  {d.description ? <p className="text-xs text-gray-500 mt-1 truncate">{d.description}</p> : null}
+                </div>
+              ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showStudent ? (
         <>
+          <div className="card mb-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Signalements tuteur</h2>
+            </div>
+            <div className="space-y-3">
+              {studentDisputesLoading ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Chargement des signalements…</p>
+              ) : null}
+              {!studentDisputesLoading && studentDisputes.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Aucun signalement pour le moment.</p>
+              ) : null}
+              {!studentDisputesLoading &&
+                studentDisputes.map((d) => (
+                  <div key={d.id} className="p-3 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-gray-800 truncate">{d.title}</p>
+                      <span className={d.status_key === 'pending' ? 'badge-orange' : d.status_key === 'in_progress' ? 'badge-blue' : 'badge-green'}>{d.status}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Par {d.reporterName} • {d.module || 'Séance'} {d.date ? `• ${d.date}` : ''}
+                    </p>
+                    {d.cause ? <p className="text-xs text-gray-600 mt-1">Cause: {d.cause}</p> : null}
+                    {d.description ? <p className="text-xs text-gray-500 mt-1 truncate">{d.description}</p> : null}
+                  </div>
+                ))}
+            </div>
+          </div>
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">Prochaines Séances</h2>
@@ -313,7 +438,7 @@ export default function GlobalStudentTutorDashboard() {
         </>
       ) : null}
 
-      {isTutor ? (
+      {showTutor ? (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5 mt-4">
             <div className="card">

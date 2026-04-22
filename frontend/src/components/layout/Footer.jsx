@@ -2,6 +2,11 @@ import { GraduationCap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Footer() {
+  const scrollTo = (id) => {
+    const el = typeof document !== 'undefined' ? document.getElementById(id) : null;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <footer className="bg-gray-900 text-gray-300 pt-12 pb-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -17,9 +22,10 @@ export default function Footer() {
           </div>
           <div>
             <h4 className="font-semibold text-white mb-3 text-sm">Liens rapides</h4>
-            {['Modules', 'Tuteurs', 'À propos', 'Contact'].map((item) => (
-              <Link key={item} to="#" className="block text-sm text-gray-400 hover:text-primary-400 mb-1.5">{item}</Link>
-            ))}
+            <button type="button" onClick={() => scrollTo('accueil-form')} className="block text-sm text-gray-400 hover:text-primary-400 mb-1.5">Accueil</button>
+            <button type="button" onClick={() => scrollTo('comment-ca-marche')} className="block text-sm text-gray-400 hover:text-primary-400 mb-1.5">Comment ça marche ?</button>
+            <button type="button" onClick={() => scrollTo('a-propos-footer')} className="block text-sm text-gray-400 hover:text-primary-400 mb-1.5">À propos</button>
+            <Link to="/login" className="block text-sm text-gray-400 hover:text-primary-400 mb-1.5">Contact</Link>
           </div>
           <div>
             <h4 className="font-semibold text-white mb-3 text-sm">Ressources</h4>

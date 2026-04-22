@@ -2,7 +2,7 @@ import uuid
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -11,6 +11,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import (
+    Dispute,
+    DisputeStatus,
     EvaluationSeance,
     FormatSeance,
     ModulePropose,
@@ -447,6 +449,178 @@ class NotificationMarkReadView(APIView):
             n.is_read = True
             n.save(update_fields=["is_read"])
         return Response(NotificationSerializer(n).data, status=status.HTTP_200_OK)
+
+
+class ReportDisputeView(APIView):
+    """POST /api/disputes/report/ — signaler un problème sur une réservation."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    ISSUE_LABELS = {
+        "no_show": "Absence non justifiée (tuteur)",
+        "late": "Retard important",
+        "behavior": "Comportement inapproprié",
+        "student_no_show": "Empêchement étudiant",
+        "student_absence": "Absence signalée (étudiant)",
+        "tutor_absence": "Absence signalée (tuteur)",
+        "other": "Autre problème",
+    }
+
+    def post(self, request):
+        reservation_id = request.data.get("reservation_id")
+        issue_type = str(request.data.get("issue_type") or "other").strip().lower()
+        cause_code = str(request.data.get("cause_code") or "").strip().lower()
+        cause_label = str(request.data.get("cause_label") or "").strip()
+        description = (request.data.get("description") or "").strip()
+        if not reservation_id:
+            return Response({"detail": "reservation_id requis."}, status=status.HTTP_400_BAD_REQUEST)
+        r = get_object_or_404(Reservation.objects.select_related("etudiant", "tuteur"), pk=reservation_id)
+        if request.user.id not in (r.etudiant_id, r.tuteur_id):
+            return Response({"detail": "Accès refusé."}, status=status.HTTP_403_FORBIDDEN)
+
+        reporter_is_student = request.user.id == r.etudiant_id
+        if issue_type == "other":
+            issue_type = "student_absence" if reporter_is_student else "tutor_absence"
+        issue_label = self.ISSUE_LABELS.get(issue_type, self.ISSUE_LABELS["other"])
+        title = f"{issue_label} — {r.module_titre}"
+        if cause_label:
+            title = f"{issue_label} ({cause_label}) — {r.module_titre}"
+
+        if reporter_is_student:
+            target_id = r.tuteur_id
+        else:
+            target_id = r.etudiant_id
+
+        combined_description = description
+        if cause_label:
+            combined_description = f"Cause déclarée: {cause_label}" + (f"\n{description}" if description else "")
+
+        d = Dispute.objects.create(
+            title=title[:160],
+            description=combined_description[:2000],
+            reporter_id=request.user.id,
+            target_id=target_id,
+            reservation_id=r.id,
+            status=DisputeStatus.PENDING,
+        )
+        # Dès qu'un signalement est créé, la séance est annulée côté étudiant et tuteur.
+        if r.statut in (StatutReservation.PENDING, StatutReservation.CONFIRMED):
+            r.statut = StatutReservation.CANCELLED
+            r.student_session_confirm = False
+            r.tutor_session_confirm = False
+            r.save(update_fields=["statut", "student_session_confirm", "tutor_session_confirm", "updated_at"])
+        Notification.objects.create(
+            user_id=target_id,
+            type="reminder",
+            text=f"Nouveau signalement d'absence sur « {r.module_titre} ».",
+        )
+        Notification.objects.create(
+            user_id=request.user.id,
+            type="reminder",
+            text=f"La séance « {r.module_titre} » a été annulée suite à votre signalement.",
+        )
+        return Response(
+            {
+                "id": d.id,
+                "status": d.status,
+                "issue_type": issue_type,
+                "cause_code": cause_code,
+                "cause_label": cause_label,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TutorDisputesView(APIView):
+    """GET /api/tuteur/disputes/ — signalements concernant le tuteur connecté."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not getattr(request.user, "is_tutor", False):
+            return Response({"detail": "Réservé aux tuteurs."}, status=status.HTTP_403_FORBIDDEN)
+        qs = (
+            Dispute.objects.select_related("reporter", "reservation")
+            .filter(
+                Q(target=request.user) | Q(reservation__tuteur=request.user)
+            )
+            .order_by("-created_at")[:100]
+        )
+        data = []
+        for d in qs:
+            status_label = (
+                "En attente"
+                if d.status == DisputeStatus.PENDING
+                else "En cours"
+                if d.status == DisputeStatus.IN_PROGRESS
+                else "Résolu"
+            )
+            cause = ""
+            if d.description.startswith("Cause déclarée:"):
+                cause = d.description.split("\n", 1)[0].replace("Cause déclarée:", "").strip()
+            data.append(
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "description": d.description,
+                    "status": status_label,
+                    "status_key": d.status,
+                    "created_at": d.created_at,
+                    "reporterName": d.reporter.name if d.reporter else "Étudiant",
+                    "reservationId": d.reservation_id,
+                    "module": d.reservation.module_titre if d.reservation else "",
+                    "date": d.reservation.date_label if d.reservation else "",
+                    "time": d.reservation.creneau_label if d.reservation else "",
+                    "cause": cause,
+                }
+            )
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class StudentDisputesView(APIView):
+    """GET /api/etudiant/disputes/ — signalements concernant l’étudiant connecté."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not getattr(request.user, "is_student", False):
+            return Response({"detail": "Réservé aux étudiants."}, status=status.HTTP_403_FORBIDDEN)
+        qs = (
+            Dispute.objects.select_related("reporter", "reservation")
+            .filter(
+                Q(target=request.user) | Q(reservation__etudiant=request.user)
+            )
+            .order_by("-created_at")[:100]
+        )
+        data = []
+        for d in qs:
+            status_label = (
+                "En attente"
+                if d.status == DisputeStatus.PENDING
+                else "En cours"
+                if d.status == DisputeStatus.IN_PROGRESS
+                else "Résolu"
+            )
+            cause = ""
+            if d.description.startswith("Cause déclarée:"):
+                cause = d.description.split("\n", 1)[0].replace("Cause déclarée:", "").strip()
+            data.append(
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "description": d.description,
+                    "status": status_label,
+                    "status_key": d.status,
+                    "created_at": d.created_at,
+                    "reporterName": d.reporter.name if d.reporter else "Tuteur",
+                    "reservationId": d.reservation_id,
+                    "module": d.reservation.module_titre if d.reservation else "",
+                    "date": d.reservation.date_label if d.reservation else "",
+                    "time": d.reservation.creneau_label if d.reservation else "",
+                    "cause": cause,
+                }
+            )
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class MesSeancesEtudiantView(APIView):

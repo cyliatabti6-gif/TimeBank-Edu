@@ -1,17 +1,41 @@
-import { createElement, useEffect } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Clock, Star, Users, BookOpen, ChevronRight, CheckCircle2, GraduationCap, MessageCircle, Calendar } from 'lucide-react';
+import { ArrowRight, Mail, Lock, Eye, EyeOff, User, Shield, CheckCircle2, GraduationCap, Star, Gift, TrendingUp, Calendar, Clock, Users } from 'lucide-react';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
-import StarRating from '../components/common/StarRating';
-import Avatar from '../components/common/Avatar';
-import { mockModules, mockTutors } from '../context/AppContext';
+import { getApiBase } from '../lib/api';
 
-const moduleIcons = { 'Algorithme': '⌨️', 'Analyse 1': '📐', 'Base de Données': '🗄️', 'Comptabilité': '💼', 'Python': '🐍', 'Structures de Données': '🔗' };
-const moduleBg = ['from-blue-50 to-blue-100', 'from-purple-50 to-purple-100', 'from-cyan-50 to-cyan-100', 'from-green-50 to-green-100', 'from-yellow-50 to-yellow-100', 'from-red-50 to-red-100'];
+const FILIERE_INSCRIPTION = 'Informatique';
+const niveaux = ['L1', 'L2', 'L3', 'M1', 'M2', 'Doctorat'];
+
+function formatApiErrors(data) {
+  if (!data || typeof data !== 'object') return 'Une erreur est survenue.';
+  if (typeof data.detail === 'string') return data.detail;
+  const parts = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (Array.isArray(val)) parts.push(`${key}: ${val.join(' ')}`);
+    else if (typeof val === 'string') parts.push(`${key}: ${val}`);
+  }
+  return parts.length ? parts.join(' ') : 'Vérifiez les champs du formulaire.';
+}
 
 export default function Home() {
   const navigate = useNavigate();
+  const [form, setForm] = useState({
+    nom: '',
+    prenom: '',
+    email: '',
+    filiere: FILIERE_INSCRIPTION,
+    niveau: '',
+    password: '',
+    confirm: '',
+    bio: '',
+  });
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
     const sectionId = (typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '').trim();
@@ -24,159 +48,206 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []);
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!accepted) {
+      setApiError("Veuillez accepter les conditions d'utilisation.");
+      return;
+    }
+    setApiError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/inscription/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nom: form.nom.trim(),
+          prenom: form.prenom.trim(),
+          email: form.email.trim(),
+          filiere: form.filiere,
+          niveau: form.niveau,
+          password: form.password,
+          confirm: form.confirm,
+          bio: form.bio || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setApiError(formatApiErrors(data));
+        return;
+      }
+      const registeredEmail = data.user?.email || form.email.trim();
+      navigate('/email-confirmation', { state: { email: registeredEmail } });
+    } catch {
+      setApiError('Le serveur est indisponible. Vérifiez que le backend Django est démarré.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <PublicNavbar />
-
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-white via-primary-50 to-white py-16 px-4">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight mb-4">
-              Échange de<br />
-              <span className="text-primary-600">Tutorat Universitaire</span>
+      <section id="accueil-form" className="px-4 py-10">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          <div className="pt-4">
+            <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 rounded-full px-4 py-1.5 text-sm font-semibold mb-5">
+              <User size={16} />
+              Rejoignez-nous
+            </div>
+            <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-4">
+              Rejoignez la communauté de
+              <span className="text-primary-600"> tutorat universitaire</span>
             </h1>
-            <p className="text-gray-500 text-lg mb-6">Apprenez, enseignez, progressez ensemble grâce à un système équitable et sécurisé.</p>
-            <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-200 text-primary-700 px-4 py-2 rounded-full text-sm font-semibold mb-8">
-              <Clock size={16} />
-              1h enseignée = 1h gagnée
+            <p className="text-gray-600 text-xl max-w-xl">
+              Apprenez, enseignez et progressez ensemble grâce à un système équitable, sécurisé et bienveillant.
+            </p>
+            <div className="mt-10 hidden md:block">
+              <img
+                src="/home-illustration.png"
+                alt="Illustration tutorat universitaire"
+                className="w-full max-w-[540px] rounded-2xl border border-primary-100 bg-white"
+              />
             </div>
-            <div className="flex flex-wrap gap-4">
-              <button onClick={() => navigate('/register')} className="btn-primary text-base px-8 py-3">
-                S'inscrire <ArrowRight size={18} />
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+            <div className="text-center mb-6">
+              <h2 className="text-4xl font-bold text-gray-900">Créer un compte</h2>
+              <p className="text-gray-500 mt-2">Inscrivez-vous avec votre email universitaire.</p>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Prénom</label>
+                  <div className="relative">
+                    <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input type="text" placeholder="Votre prénom" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} className="input-field pl-9" required />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom</label>
+                  <div className="relative">
+                    <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input type="text" placeholder="Votre nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="input-field pl-9" required />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email universitaire</label>
+                <div className="relative">
+                  <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input type="email" placeholder="prenom.nom@universite.fr" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field pl-9" required />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe</label>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input type={showPwd ? 'text' : 'password'} placeholder="Minimum 8 caractères" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input-field pl-9 pr-10" required minLength={8} />
+                  <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPwd ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmer le mot de passe</label>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input type={showConfirm ? 'text' : 'password'} placeholder="Confirmez votre mot de passe" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} className="input-field pl-9 pr-10" required minLength={8} />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Filière</label>
+                  <input value={FILIERE_INSCRIPTION} readOnly className="input-field bg-gray-50" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Niveau</label>
+                  <select value={form.niveau} onChange={(e) => setForm({ ...form, niveau: e.target.value })} className="input-field" required>
+                    <option value="">Sélectionnez votre niveau</option>
+                    {niveaux.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+                J'accepte les conditions d'utilisation
+              </label>
+              {apiError && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{apiError}</p>}
+              <button type="submit" disabled={loading} className="btn-primary w-full py-3 text-base disabled:opacity-60">
+                {loading ? 'Inscription…' : <>S'inscrire <ArrowRight size={18} /></>}
               </button>
-              <button onClick={() => navigate('/login')} className="btn-secondary text-base px-8 py-3">Se connecter</button>
-            </div>
-          </div>
-          <div className="relative hidden md:flex justify-center">
-            <div className="w-80 h-72 bg-gradient-to-br from-primary-100 to-primary-200 rounded-3xl flex items-center justify-center relative overflow-hidden">
-              <div className="absolute top-4 right-4 w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center">
-                <GraduationCap size={30} className="text-primary-600" />
-              </div>
-              <div className="absolute bottom-4 left-4 w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center">
-                <Clock size={30} className="text-primary-600" />
-              </div>
-              <div className="absolute top-16 left-6 w-12 h-12 bg-white rounded-2xl shadow-md flex items-center justify-center">
-                <MessageCircle size={22} className="text-primary-600" />
-              </div>
-              <div className="text-center">
-                <div className="text-5xl font-bold text-primary-700">1h</div>
-                <div className="text-primary-600 font-medium">=</div>
-                <div className="text-5xl font-bold text-primary-700">1h</div>
-              </div>
-            </div>
+              <p className="text-center text-sm text-gray-500 mt-1">
+                Vous avez déjà un compte ?{' '}
+                <Link to="/login" className="text-primary-600 font-semibold hover:underline">Se connecter</Link>
+              </p>
+            </form>
           </div>
         </div>
       </section>
 
-      {/* Popular Modules */}
-      <section id="modules-populaires" className="py-14 px-4 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Modules Populaires</h2>
-            <Link to="/student/modules" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
-              Voir tous les modules <ChevronRight size={16} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {mockModules.slice(0, 3).map((mod, i) => (
-              <div key={mod.id} className={`card hover:shadow-md transition-shadow cursor-pointer`} onClick={() => navigate(`/modules/${mod.id}`)}>
-                <div className="flex items-start gap-4 mb-4">
-                  <div className={`w-12 h-12 bg-gradient-to-br ${moduleBg[i]} rounded-xl flex items-center justify-center text-xl flex-shrink-0`}>
-                    {moduleIcons[mod.title] || '📚'}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">{mod.title}</h3>
-                      <span className="badge-blue">{mod.level}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Par {mod.tutor}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <StarRating rating={mod.score} size={13} />
-                  <span className="text-sm font-semibold text-gray-800">{mod.score}</span>
-                  <span className="text-xs text-gray-400">({mod.reviews} avis)</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Banner */}
-      <section id="a-propos" className="py-10 bg-primary-600">
-        <div className="max-w-5xl mx-auto px-4 grid grid-cols-3 gap-8 text-center">
-          {[{ val: '500+', label: 'Étudiants' }, { val: '1200+', label: 'Tutorats réalisés' }, { val: '4.8/5', label: 'Note moyenne' }].map((s) => (
-            <div key={s.label}>
-              <div className="text-3xl font-bold text-white">{s.val}</div>
-              <div className="text-primary-100 text-sm mt-1">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Top Tutors */}
-      <section id="tuteurs-mieux-notes" className="py-14 px-4 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Tuteurs les mieux notés</h2>
-            <Link to="/student/modules" className="text-primary-600 text-sm font-medium flex items-center gap-1 hover:underline">
-              Voir tous les tuteurs <ChevronRight size={16} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockTutors.map((t) => (
-              <div key={t.id} className="card hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/tuteurs/${t.id}`)}>
-                <div className="flex items-center gap-3 mb-3">
-                  <Avatar initials={t.avatar} size="md" />
-                  <div>
-                    <div className="font-semibold text-sm text-gray-900">{t.name}</div>
-                    <div className="text-xs text-gray-500">{t.level} • {t.filiere}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mb-3">
-                  <StarRating rating={t.score} size={12} />
-                  <span className="text-sm font-semibold">{t.score}</span>
-                  <span className="text-xs text-gray-400">({t.reviews} avis)</span>
-                </div>
-                <span className="badge-green">Disponible</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="comment-ca-marche" className="py-14 px-4 bg-white">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-10">Comment ça marche ?</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+      <section id="comment-ca-marche" className="px-4 pb-10">
+        <div className="max-w-7xl mx-auto bg-white rounded-2xl border border-gray-100 p-5 sm:p-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {[
-              { icon: Users, step: '1', title: 'Inscription', desc: 'Créez votre compte avec votre email universitaire' },
-              { icon: BookOpen, step: '2', title: 'Trouvez un module', desc: 'Recherchez un tuteur selon vos besoins' },
-              { icon: Calendar, step: '3', title: 'Réservez un créneau', desc: 'Choisissez un horaire et envoyez une demande' },
-              { icon: CheckCircle2, step: '4', title: 'Apprenez et gagnez', desc: 'Validez la séance et gagnez des heures' },
-            ].map((item) => (
-              <div key={item.step} className="flex flex-col items-center text-center">
-                <div className="w-14 h-14 bg-primary-100 rounded-2xl flex items-center justify-center mb-4">
-                  {createElement(item.icon, { size: 26, className: 'text-primary-600' })}
+              { icon: Users, value: '500+', label: 'Étudiants' },
+              { icon: TrendingUp, value: '1200+', label: 'Séances réalisées' },
+              { icon: Star, value: '4.8/5', label: 'Satisfaction' },
+              { icon: Gift, value: '100%', label: 'Gratuit' },
+            ].map((s) => (
+              <div key={s.label} className="bg-gray-50 rounded-xl border border-gray-100 px-4 py-4 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
+                  {createElement(s.icon, { size: 22, className: 'text-primary-600' })}
                 </div>
-                <div className="font-semibold text-gray-900 mb-2">{item.step}. {item.title}</div>
-                <p className="text-sm text-gray-500">{item.desc}</p>
+                <div>
+                  <p className="text-2xl font-bold text-primary-700 leading-none">{s.value}</p>
+                  <p className="text-sm text-gray-600 mt-1">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="text-4xl font-bold text-center text-gray-900 mb-6">Comment ça marche ?</h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-center mb-6">
+            {[
+              { icon: User, title: '1. Inscrivez-vous', desc: 'Créez votre compte gratuitement en quelques minutes.' },
+              { icon: Calendar, title: '2. Réservez un créneau', desc: 'Trouvez un tuteur ou devenez tuteur et choisissez un horaire.' },
+              { icon: GraduationCap, title: '3. Apprenez & gagnez du temps', desc: 'Partagez vos connaissances, apprenez et progressez ensemble.' },
+            ].map((item, index) => (
+              <div key={item.title} className="relative bg-gray-50 rounded-xl border border-gray-100 p-5 flex items-start gap-3 min-h-[130px]">
+                <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+                  {createElement(item.icon, { size: 22, className: 'text-primary-600' })}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{item.title}</p>
+                  <p className="text-sm text-gray-600 mt-1">{item.desc}</p>
+                </div>
+                {index < 2 && (
+                  <span className="hidden lg:flex absolute -right-6 top-1/2 -translate-y-1/2 text-primary-600 text-2xl font-bold z-10">→</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { icon: Shield, title: 'Sécurisé', desc: 'Vos données sont protégées et confidentielles.' },
+              { icon: Clock, title: 'Flexible', desc: 'Réservez selon vos disponibilités, à tout moment.' },
+              { icon: Users, title: 'Communauté bienveillante', desc: 'Une communauté étudiante solidaire et respectueuse.' },
+            ].map((item) => (
+              <div key={item.title} className="bg-gray-50 rounded-xl border border-gray-100 px-4 py-4 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+                  {createElement(item.icon, { size: 20, className: 'text-primary-600' })}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{item.title}</p>
+                  <p className="text-sm text-gray-600 mt-1">{item.desc}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-14 px-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white text-center">
-        <h2 className="text-3xl font-bold mb-4">Prêt à commencer ?</h2>
-        <p className="text-primary-100 mb-8 text-lg">Rejoignez plus de 500 étudiants qui échangent leurs connaissances.</p>
-        <button onClick={() => navigate('/register')} className="bg-white text-primary-700 font-semibold px-8 py-3 rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-2 mx-auto">
-          Créer un compte gratuit <ArrowRight size={18} />
-        </button>
       </section>
 
       <div id="a-propos-footer">

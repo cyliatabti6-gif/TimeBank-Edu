@@ -7,10 +7,8 @@ export default function PublicNavbar() {
 
   const navItems = [
     { label: 'Accueil', type: 'route', to: '/' },
-    { label: 'Modules', type: 'section', sectionId: 'modules-populaires' },
-    { label: 'Tuteurs', type: 'section', sectionId: 'tuteurs-mieux-notes' },
-    { label: 'À propos', type: 'section', sectionId: 'a-propos-footer' },
     { label: 'Comment ça marche ?', type: 'section', sectionId: 'comment-ca-marche' },
+    { label: 'À propos', type: 'section', sectionId: 'a-propos-footer' },
   ];
 
   const goToSection = (sectionId) => {
@@ -60,7 +58,6 @@ export default function PublicNavbar() {
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('/login')} className="btn-secondary text-sm py-2 px-4">Se connecter</button>
-            <button onClick={() => navigate('/register')} className="btn-primary text-sm py-2 px-4">S'inscrire</button>
           </div>
         </div>
       </div>

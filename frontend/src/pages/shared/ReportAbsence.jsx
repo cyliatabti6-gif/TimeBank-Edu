@@ -1,20 +1,27 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, Check } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
+import { useApp } from '../../context/AppContext';
+import { getAccessToken } from '../../lib/authStorage';
+import { reportSessionProblem } from '../../lib/disputesApi';
 
 const steps = ['Séance', 'Détails', 'Confirmation'];
 
-const issueTypes = [
-  { id: 'no_show', label: 'Absence non justifiée (tuteur)', desc: "Le tuteur ne s'est pas présenté et n'a pas prévenu." },
-  { id: 'late', label: 'Retard important', desc: 'Le tuteur est arrivé avec plus de 30 minutes de retard.' },
-  { id: 'behavior', label: 'Comportement inapproprié', desc: 'Le tuteur a eu un comportement inapproprié.' },
-  {
-    id: 'student_no_show',
-    label: "Je n'ai pas pu me rendre (présentiel)",
-    desc: "Empêchement, problème d'accès au lieu, ou autre empêchement de votre côté.",
-  },
-  { id: 'other', label: 'Autre problème', desc: 'Décrivez brièvement le problème.' },
+const studentAbsenceCauses = [
+  { id: 'maladie', label: 'Maladie', desc: "Je n'ai pas pu assister à la séance pour raison de santé." },
+  { id: 'urgence_familiale', label: 'Urgence familiale', desc: "Un imprévu familial m'a empêché d'être présent(e)." },
+  { id: 'probleme_transport', label: 'Problème de transport', desc: 'Retard ou absence lié au déplacement.' },
+  { id: 'conflit_horaire', label: "Conflit d'horaire", desc: 'Un chevauchement de planning a empêché ma présence.' },
+  { id: 'autre', label: 'Autre cause', desc: 'Une autre raison a empêché ma présence.' },
+];
+
+const tutorAbsenceCauses = [
+  { id: 'maladie', label: 'Maladie', desc: "Je n'ai pas pu assurer la séance pour raison de santé." },
+  { id: 'urgence_familiale', label: 'Urgence familiale', desc: "Un imprévu familial m'a empêché d'assurer la séance." },
+  { id: 'indisponibilite', label: 'Indisponibilité imprévue', desc: 'Un empêchement de dernière minute est survenu.' },
+  { id: 'probleme_connexion', label: 'Problème technique / connexion', desc: "Je n'ai pas pu me connecter ou accéder au cours." },
+  { id: 'autre', label: 'Autre cause', desc: "Une autre raison m'a empêché d'assurer la séance." },
 ];
 
 const defaultSession = {
@@ -27,6 +34,9 @@ const defaultSession = {
 export default function ReportAbsence() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useApp();
+  const isStudentReporter = Boolean(currentUser?.is_student);
+  const causeOptions = isStudentReporter ? studentAbsenceCauses : tutorAbsenceCauses;
   const sessionInfo = useMemo(() => {
     const s = location.state;
     if (s?.tutorName && s?.module) {
@@ -44,10 +54,17 @@ export default function ReportAbsence() {
 
   const [step, setStep] = useState(1);
   const [selectedIssue, setSelectedIssue] = useState(
-    sessionInfo.flow === 'presentiel_student_issue' ? 'student_no_show' : 'no_show',
+    causeOptions[0]?.id || 'autre',
   );
   const [description, setDescription] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!causeOptions.some((c) => c.id === selectedIssue)) {
+      setSelectedIssue(causeOptions[0]?.id || 'autre');
+    }
+  }, [causeOptions, selectedIssue]);
 
   const sessionLine = `${sessionInfo.date} • ${sessionInfo.creneauLabel}`;
 
@@ -120,8 +137,8 @@ export default function ReportAbsence() {
 
         {step === 2 && (
           <div className="card space-y-3">
-            <h3 className="font-semibold text-gray-900 mb-3">Type de problème</h3>
-            {issueTypes.map((issue) => (
+            <h3 className="font-semibold text-gray-900 mb-3">Cause de l&apos;absence</h3>
+            {causeOptions.map((issue) => (
               <label
                 key={issue.id}
                 className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer border-2 transition-all ${
@@ -177,17 +194,53 @@ export default function ReportAbsence() {
               <p className="text-gray-600 mt-1">
                 {sessionInfo.tutorName} — {sessionInfo.module} ({sessionLine})
               </p>
-              <p className="text-gray-600">Type : {issueTypes.find((i) => i.id === selectedIssue)?.label}</p>
+              <p className="text-gray-600">Cause : {causeOptions.find((i) => i.id === selectedIssue)?.label}</p>
               {description ? <p className="text-gray-500 mt-1 italic">&quot;{description}&quot;</p> : null}
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={() => setStep(2)} className="btn-secondary flex-1 py-2.5">
                 Retour
               </button>
-              <button type="button" onClick={() => setSubmitted(true)} className="btn-primary flex-1 py-2.5">
-                Envoyer le signalement
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  setError('');
+                  const token = getAccessToken();
+                  if (!token) {
+                    setError('Session expirée. Veuillez vous reconnecter.');
+                    return;
+                  }
+                  if (!sessionInfo.reservationId) {
+                    setError('Aucune réservation associée à ce signalement.');
+                    return;
+                  }
+                  setSubmitting(true);
+                  try {
+                    await reportSessionProblem(token, {
+                      reservation_id: sessionInfo.reservationId,
+                      issue_type: isStudentReporter ? 'student_absence' : 'tutor_absence',
+                      cause_code: selectedIssue,
+                      cause_label: causeOptions.find((i) => i.id === selectedIssue)?.label || '',
+                      description,
+                    });
+                    setSubmitted(true);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'Signalement impossible.');
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="btn-primary flex-1 py-2.5 disabled:opacity-60"
+              >
+                {submitting ? 'Envoi…' : 'Envoyer le signalement'}
               </button>
             </div>
+            {error ? (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            ) : null}
           </div>
         )}
       </div>
