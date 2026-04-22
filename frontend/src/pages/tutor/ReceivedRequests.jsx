@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, MessageCircle, Search, Clock } from 'lucide-react';
+import { Check, X, MessageCircle, Clock } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
@@ -42,10 +42,9 @@ function initials(name) {
     .toUpperCase();
 }
 
-export default function ReceivedRequests() {
+export default function ReceivedRequests({ meetOnly = false }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
-  const [search, setSearch] = useState('');
   const [meetDraftById, setMeetDraftById] = useState({});
   const [meetSavingId, setMeetSavingId] = useState(null);
   const [meetErrorById, setMeetErrorById] = useState({});
@@ -135,21 +134,22 @@ export default function ReceivedRequests() {
     }
   };
 
-  const incoming = useMemo(
-    () => reservations.filter((r) => Number(r.tutorId) === Number(currentUser?.id)),
-    [reservations, currentUser?.id],
-  );
+  const incoming = useMemo(() => {
+    const mine = reservations.filter((r) => Number(r.tutorId) === Number(currentUser?.id));
+    if (!meetOnly) return mine;
+    return mine.filter((r) => isReservationOnline(r) && (r.status === 'pending' || r.status === 'confirmed'));
+  }, [reservations, currentUser?.id, meetOnly]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return incoming.filter((r) => {
+      if (meetOnly) return true;
       if (activeTab === 'En attente') return r.status === 'pending';
       if (activeTab === 'Confirmées') return r.status === 'confirmed';
       if (activeTab === 'Terminées') return r.status === 'completed';
       if (activeTab === 'Annulées') return r.status === 'cancelled';
       return true;
-    }).filter((r) => !q || r.studentName.toLowerCase().includes(q) || r.module.toLowerCase().includes(q));
-  }, [incoming, activeTab, search]);
+    });
+  }, [incoming, activeTab, meetOnly]);
 
   const statusBadge = (status) => {
     if (status === 'pending') return <span className="badge-orange">En attente</span>;
@@ -161,36 +161,33 @@ export default function ReceivedRequests() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Réservations reçues</h1>
-        </div>
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            placeholder="Étudiant, module…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-48"
-          />
+          <h1 className="text-xl font-bold text-gray-900">
+            {meetOnly ? 'Meet tuteur' : 'Réservations reçues'}
+          </h1>
+          {meetOnly ? (
+            <p className="text-sm text-gray-500 mt-1">Séances en ligne réservées (en attente et confirmées).</p>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex gap-1 mb-5 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${
-              activeTab === tab ? 'bg-primary-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {!meetOnly ? (
+        <div className="flex gap-1 mb-5 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${
+                activeTab === tab ? 'bg-primary-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {filtered.map((req) => {
@@ -310,7 +307,9 @@ export default function ReceivedRequests() {
           <div className="text-center py-12 text-gray-400">
             <Clock size={40} className="mx-auto mb-3 opacity-30" />
             {incoming.length === 0 ? (
-              <p className="text-gray-600 font-medium">No reservations found.</p>
+              <p className="text-gray-600 font-medium">
+                {meetOnly ? 'Aucune séance en ligne réservée.' : 'No reservations found.'}
+              </p>
             ) : (
               <p>Aucune réservation dans cette catégorie.</p>
             )}

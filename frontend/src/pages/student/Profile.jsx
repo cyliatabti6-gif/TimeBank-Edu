@@ -1,15 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { History } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import ProfileCard from '../../components/profile/ProfileCard';
 import ProfileInfo from '../../components/profile/ProfileInfo';
 import ProfileModal from '../../components/profile/ProfileModal';
-import PlatformActivitiesSection from '../../components/profile/PlatformActivitiesSection';
 import { useApp } from '../../context/AppContext';
 
 export default function Profile() {
-  const { currentUser, setCurrentUser, displayBalance, reservations, sessionHistory } = useApp();
+  const { currentUser, setCurrentUser, displayBalance } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
 
   return (
@@ -27,21 +24,6 @@ export default function Profile() {
 
         <div className="lg:col-span-2 space-y-4">
           <ProfileInfo user={currentUser} bioTitle="Bio personnelle" />
-
-          <PlatformActivitiesSection
-            user={currentUser}
-            reservations={reservations}
-            sessionHistory={sessionHistory}
-            footerLink={
-              <Link
-                to="/student/historique"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700"
-              >
-                <History size={14} />
-                Voir l&apos;historique
-              </Link>
-            }
-          />
         </div>
       </div>
     </DashboardLayout>

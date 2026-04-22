@@ -196,6 +196,13 @@ def module_propose_to_frontend(instance: ModulePropose, request=None) -> dict:
     """Structure attendue par FindModule.jsx et TutorDetail.jsx."""
     t = instance.tuteur
     tags = instance.tags if isinstance(instance.tags, list) else []
+    recent_comments = list(
+        EvaluationSeance.objects.filter(tuteur=t)
+        .exclude(commentaire__isnull=True)
+        .exclude(commentaire__exact="")
+        .order_by("-created_at")
+        .values("commentaire", "note", "created_at")[:2]
+    )
     avatar_url = None
     if request and getattr(t, "avatar", None) and getattr(t.avatar, "name", None):
         try:
@@ -218,6 +225,15 @@ def module_propose_to_frontend(instance: ModulePropose, request=None) -> dict:
         "description": (instance.description or "").strip(),
         "dureeLabel": (instance.duree_label or "").strip(),
         "tags": tags,
+        "recentComments": [
+            {
+                "comment": str(row.get("commentaire") or "").strip()[:240],
+                "note": int(row.get("note") or 0),
+                "created_at": row.get("created_at"),
+            }
+            for row in recent_comments
+            if str(row.get("commentaire") or "").strip()
+        ],
         "tutorReviewCount": int(getattr(t, "tutor_review_count", 0) or 0),
         "tutorProfile": {
             "id": t.id,

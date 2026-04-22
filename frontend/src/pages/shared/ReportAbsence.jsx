@@ -5,6 +5,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useApp } from '../../context/AppContext';
 import { getAccessToken } from '../../lib/authStorage';
 import { reportSessionProblem } from '../../lib/disputesApi';
+import { fetchSeanceById } from '../../lib/seancesApi';
 
 const steps = ['Séance', 'Détails', 'Confirmation'];
 
@@ -34,9 +35,14 @@ const defaultSession = {
 export default function ReportAbsence() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser } = useApp();
+  const { currentUser, reservations, upsertReservationFromApiDetail, syncReservationsWithServer } = useApp();
   const isStudentReporter = Boolean(currentUser?.is_student);
   const causeOptions = isStudentReporter ? studentAbsenceCauses : tutorAbsenceCauses;
+  const reservationIdFromState = Number(location.state?.reservationId);
+  const reservationFromStore = useMemo(
+    () => reservations.find((r) => Number(r.id) === reservationIdFromState),
+    [reservations, reservationIdFromState],
+  );
   const sessionInfo = useMemo(() => {
     const s = location.state;
     if (s?.tutorName && s?.module) {
@@ -49,8 +55,22 @@ export default function ReportAbsence() {
         flow: s.flow,
       };
     }
+    if (reservationFromStore) {
+      const tutorName = isStudentReporter ? reservationFromStore.tutorName : reservationFromStore.studentName;
+      return {
+        tutorName: tutorName || defaultSession.tutorName,
+        module: reservationFromStore.module || defaultSession.module,
+        date: reservationFromStore.date || '—',
+        creneauLabel: reservationFromStore.creneauLabel || '—',
+        reservationId: reservationFromStore.id,
+        flow: s?.flow || null,
+      };
+    }
+    if (Number.isFinite(reservationIdFromState)) {
+      return { ...defaultSession, reservationId: reservationIdFromState, flow: s?.flow || null };
+    }
     return { ...defaultSession, reservationId: null, flow: null };
-  }, [location.state]);
+  }, [location.state, reservationFromStore, reservationIdFromState, isStudentReporter]);
 
   const [step, setStep] = useState(1);
   const [selectedIssue, setSelectedIssue] = useState(
@@ -60,6 +80,25 @@ export default function ReportAbsence() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!Number.isFinite(reservationIdFromState) || reservationFromStore) return;
+    const token = getAccessToken();
+    if (!token) return;
+    let cancelled = false;
+    fetchSeanceById(reservationIdFromState, token)
+      .then((detail) => {
+        if (cancelled) return;
+        upsertReservationFromApiDetail(detail);
+      })
+      .catch(() => {
+        /* fallback sur l'état local */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reservationIdFromState, reservationFromStore, upsertReservationFromApiDetail]);
+
   useEffect(() => {
     if (!causeOptions.some((c) => c.id === selectedIssue)) {
       setSelectedIssue(causeOptions[0]?.id || 'autre');
@@ -79,7 +118,11 @@ export default function ReportAbsence() {
           <p className="text-gray-500 text-sm mb-6">
             Votre signalement a été transmis. L&apos;administration reviendra vers vous si nécessaire.
           </p>
-          <button type="button" onClick={() => navigate('/student/demandes')} className="btn-primary px-8 py-2.5">
+          <button
+            type="button"
+            onClick={() => navigate(isStudentReporter ? '/student/demandes' : '/tutor/demandes')}
+            className="btn-primary px-8 py-2.5"
+          >
             Retour aux réservations
           </button>
         </div>
@@ -224,6 +267,7 @@ export default function ReportAbsence() {
                       cause_label: causeOptions.find((i) => i.id === selectedIssue)?.label || '',
                       description,
                     });
+                    await syncReservationsWithServer();
                     setSubmitted(true);
                   } catch (e) {
                     setError(e instanceof Error ? e.message : 'Signalement impossible.');

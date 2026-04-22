@@ -541,15 +541,19 @@ class TutorDisputesView(APIView):
             return Response({"detail": "Réservé aux tuteurs."}, status=status.HTTP_403_FORBIDDEN)
         qs = (
             Dispute.objects.select_related("reporter", "reservation")
-            .filter(
-                Q(target=request.user) | Q(reservation__tuteur=request.user)
-            )
+            .filter(target=request.user, reservation__tuteur=request.user)
             .order_by("-created_at")[:100]
         )
         data = []
         for d in qs:
+            reservation_cancelled = bool(
+                d.reservation and d.reservation.statut == StatutReservation.CANCELLED
+            )
+            status_key = "cancelled" if reservation_cancelled else d.status
             status_label = (
-                "En attente"
+                "Annulée"
+                if reservation_cancelled
+                else "En attente"
                 if d.status == DisputeStatus.PENDING
                 else "En cours"
                 if d.status == DisputeStatus.IN_PROGRESS
@@ -564,7 +568,7 @@ class TutorDisputesView(APIView):
                     "title": d.title,
                     "description": d.description,
                     "status": status_label,
-                    "status_key": d.status,
+                    "status_key": status_key,
                     "created_at": d.created_at,
                     "reporterName": d.reporter.name if d.reporter else "Étudiant",
                     "reservationId": d.reservation_id,
@@ -587,15 +591,19 @@ class StudentDisputesView(APIView):
             return Response({"detail": "Réservé aux étudiants."}, status=status.HTTP_403_FORBIDDEN)
         qs = (
             Dispute.objects.select_related("reporter", "reservation")
-            .filter(
-                Q(target=request.user) | Q(reservation__etudiant=request.user)
-            )
+            .filter(target=request.user, reservation__etudiant=request.user)
             .order_by("-created_at")[:100]
         )
         data = []
         for d in qs:
+            reservation_cancelled = bool(
+                d.reservation and d.reservation.statut == StatutReservation.CANCELLED
+            )
+            status_key = "cancelled" if reservation_cancelled else d.status
             status_label = (
-                "En attente"
+                "Annulée"
+                if reservation_cancelled
+                else "En attente"
                 if d.status == DisputeStatus.PENDING
                 else "En cours"
                 if d.status == DisputeStatus.IN_PROGRESS
@@ -610,7 +618,7 @@ class StudentDisputesView(APIView):
                     "title": d.title,
                     "description": d.description,
                     "status": status_label,
-                    "status_key": d.status,
+                    "status_key": status_key,
                     "created_at": d.created_at,
                     "reporterName": d.reporter.name if d.reporter else "Tuteur",
                     "reservationId": d.reservation_id,

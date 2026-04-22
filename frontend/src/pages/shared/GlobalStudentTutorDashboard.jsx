@@ -10,10 +10,8 @@ import {
   Calendar,
   Check,
   X,
-  TrendingUp,
   Inbox,
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Avatar from '../../components/common/Avatar';
 import StarRating from '../../components/common/StarRating';
@@ -139,23 +137,6 @@ export default function GlobalStudentTutorDashboard() {
     [reservations, tutorTid],
   );
 
-  const tutorChartData = useMemo(() => buildTutorMonthlyChartSeries(reservations, tutorTid), [reservations, tutorTid]);
-
-  const tutorPresencePct = useMemo(() => {
-    const completed = tutorReservationsMine.filter((r) => r.status === 'completed').length;
-    const cancelled = tutorReservationsMine.filter((r) => r.status === 'cancelled').length;
-    const denom = completed + cancelled;
-    if (denom === 0) return null;
-    return Math.round((completed / denom) * 100);
-  }, [tutorReservationsMine]);
-
-  const studentsHelpedCount = useMemo(() => {
-    const ids = new Set(
-      tutorReservationsMine.filter((r) => r.status === 'completed').map((r) => Number(r.studentId)),
-    );
-    return ids.size;
-  }, [tutorReservationsMine]);
-
   const studentUpcomingSessions = useMemo(() => {
     const uid = currentUser?.id;
     if (uid == null || !showStudent) return [];
@@ -165,34 +146,25 @@ export default function GlobalStudentTutorDashboard() {
       .slice(0, 4);
   }, [reservations, currentUser?.id, showStudent]);
 
-  const tutorRecentIncoming = useMemo(() => {
+  const tutorWeeklyUpcoming = useMemo(() => {
     const uid = currentUser?.id;
     if (uid == null || !showTutor) return [];
-    return [...reservations]
-      .filter((r) => Number(r.tutorId) === Number(uid))
-      .sort((a, b) => {
-        if (reservationSortWeight(a.status) !== reservationSortWeight(b.status)) {
-          return reservationSortWeight(a.status) - reservationSortWeight(b.status);
-        }
-        return b.id - a.id;
-      })
-      .slice(0, 4);
-  }, [reservations, currentUser?.id, showTutor]);
-
-  const tutorPlanningPreview = useMemo(() => {
-    const uid = currentUser?.id;
-    if (uid == null || !showTutor) return [];
-    const mine = reservations.filter((r) => Number(r.tutorId) === Number(uid));
-    const scored = mine
-      .filter((r) => r.status !== 'cancelled')
+    const start = startOfWeekMonday(new Date());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    return reservations
+      .filter((r) => Number(r.tutorId) === Number(uid) && r.status !== 'cancelled')
       .map((r) => {
         const d = parseDateLabelToLocalDate(r.date);
-        return { r, t: d ? d.getTime() : null };
+        return { r, t: d ? d.getTime() : null, statusWeight: reservationSortWeight(r.status) };
       })
-      .filter((x) => x.t != null)
-      .sort((a, b) => a.t - b.t)
-      .slice(0, 3);
-    return scored.map((x) => x.r);
+      .filter((x) => x.t != null && x.t >= start.getTime() && x.t < end.getTime())
+      .sort((a, b) => {
+        if (a.statusWeight !== b.statusWeight) return a.statusWeight - b.statusWeight;
+        return a.t - b.t;
+      })
+      .slice(0, 8)
+      .map((x) => x.r);
   }, [reservations, currentUser?.id, showTutor]);
 
   useEffect(() => {
@@ -341,14 +313,6 @@ export default function GlobalStudentTutorDashboard() {
       ) : null}
 
       {showTutor ? (
-        <div className="mb-6">
-          <button type="button" onClick={() => navigate('/tutor/demandes')} className="btn-primary py-3 text-sm w-full sm:w-auto">
-            <Inbox size={16} /> Gérer mes demandes
-          </button>
-        </div>
-      ) : null}
-
-      {showTutor ? (
         <div className="card mb-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">Signalements étudiants</h2>
@@ -440,87 +404,28 @@ export default function GlobalStudentTutorDashboard() {
 
       {showTutor ? (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5 mt-4">
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">Réservations récentes</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate('/tutor/demandes')}
-                  className="text-xs text-primary-600 hover:underline flex items-center gap-1"
-                >
-                  Voir tout <ChevronRight size={14} />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {tutorRecentIncoming.length === 0 && (
-                  <p className="text-sm text-gray-400 py-4 text-center">Aucune demande pour le moment.</p>
-                )}
-                {tutorRecentIncoming.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                    <Avatar
-                      initials={req.studentName
-                        .split(/\s+/)
-                        .map((w) => w[0])
-                        .join('')}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{req.studentName}</p>
-                      <p className="text-xs text-gray-500">
-                        {req.module} • {stripCreneauLabelForDisplay(req.creneauLabel)} • {req.duration}h
-                      </p>
-                    </div>
-                    {req.status === 'pending' ? (
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          title="Accepter"
-                          onClick={() => updateReservationStatus(req.id, 'confirmed')}
-                          className="w-7 h-7 bg-primary-600 text-white rounded-full flex items-center justify-center hover:bg-primary-700"
-                        >
-                          <Check size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Refuser"
-                          onClick={() => updateReservationStatus(req.id, 'cancelled')}
-                          className="w-7 h-7 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : req.status === 'confirmed' ? (
-                      <span className="badge-green text-xs">Confirmée</span>
-                    ) : (
-                      <span className="text-[10px] text-gray-400 capitalize">{req.status}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Prochaines séances de la semaine</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/tutor/planning')}
+                className="text-xs text-primary-600 hover:underline"
+              >
+                Voir planning
+              </button>
             </div>
-
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">Mon Planning</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate('/tutor/planning')}
-                  className="text-xs text-primary-600 hover:underline flex items-center gap-1"
-                >
-                  Voir tout <ChevronRight size={14} />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {tutorPlanningPreview.length === 0 && (
-                  <p className="text-sm text-gray-400 py-4 text-center">Aucune séance à venir.</p>
-                )}
-                {tutorPlanningPreview.map((req) => (
+            <div className="space-y-3">
+              {tutorWeeklyUpcoming.length === 0 ? (
+                <p className="text-sm text-gray-400 py-3 text-center">Aucune séance prévue cette semaine.</p>
+              ) : (
+                tutorWeeklyUpcoming.map((req) => (
                   <div key={req.id} className="flex items-center justify-between p-2.5 rounded-lg border border-gray-100">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-700 truncate">{req.date}</p>
-                      <p className="text-xs text-gray-500 truncate">{stripCreneauLabelForDisplay(req.creneauLabel)}</p>
-                      {req.module ? <p className="text-xs text-gray-400 truncate">{req.module}</p> : null}
+                      <p className="text-sm font-semibold text-gray-800 truncate">{req.module}</p>
+                      <p className="text-xs text-gray-500">
+                        {req.studentName} • {req.date} {stripCreneauLabelForDisplay(req.creneauLabel)}
+                      </p>
                     </div>
                     <span
                       className={
@@ -528,52 +433,15 @@ export default function GlobalStudentTutorDashboard() {
                           ? 'badge-orange'
                           : req.status === 'confirmed'
                             ? 'badge-green'
-                            : req.status === 'completed'
-                              ? 'badge-blue'
-                              : 'text-[10px] text-gray-500 capitalize'
+                            : 'badge-blue'
                       }
                     >
                       {statusPlanningLabel(String(req.status || '').toLowerCase())}
                     </span>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
-          </div>
-
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900">Statistiques</h2>
-              <div className="flex items-center gap-2 text-xs text-green-600">
-                <TrendingUp size={14} />
-                Taux de présence {tutorPresencePct != null ? `${tutorPresencePct}%` : '—'}
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              {[
-                {
-                  label: 'Taux de présence',
-                  val: tutorPresencePct != null ? `${tutorPresencePct}%` : '—',
-                  cls: 'text-green-600',
-                },
-                { label: 'Étudiants aidés', val: String(studentsHelpedCount), cls: 'text-blue-600' },
-                { label: 'Note moyenne', val: `${rating.toFixed(1)}/5`, cls: 'text-yellow-600' },
-              ].map((s) => (
-                <div key={s.label} className="text-center p-2 bg-gray-50 rounded-lg">
-                  <p className={`text-lg font-bold ${s.cls}`}>{s.val}</p>
-                  <p className="text-xs text-gray-500">{s.label}</p>
-                </div>
-              ))}
-            </div>
-            <ResponsiveContainer width="100%" height={150}>
-              <AreaChart data={tutorChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="tutorats" name="Tutorats" stroke="#0d9488" fill="#ccfbf1" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
           </div>
         </>
       ) : null}

@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Layers, Inbox } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import StarRating from '../../components/common/StarRating';
 import ProfileCard from '../../components/profile/ProfileCard';
 import ProfileInfo from '../../components/profile/ProfileInfo';
 import ProfileModal from '../../components/profile/ProfileModal';
-import PlatformActivitiesSection from '../../components/profile/PlatformActivitiesSection';
 import { useApp } from '../../context/AppContext';
 import { getAccessToken } from '../../lib/authStorage';
 import { getApiBase } from '../../lib/api';
 import { fetchTutorEvaluationsRecues } from '../../lib/evaluationsApi';
 
 export default function TutorProfile() {
-  const { currentUser, setCurrentUser, displayBalance, reservations, sessionHistory } = useApp();
+  const { currentUser, setCurrentUser, displayBalance } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [receivedEvals, setReceivedEvals] = useState([]);
   const [evalsLoading, setEvalsLoading] = useState(false);
@@ -144,21 +143,6 @@ export default function TutorProfile() {
 
         <div className="lg:col-span-2 space-y-4">
           <ProfileInfo user={currentUser} bioTitle="Bio personnelle" />
-
-          <PlatformActivitiesSection
-            user={currentUser}
-            reservations={reservations}
-            sessionHistory={sessionHistory}
-            footerLink={
-              <Link
-                to="/tutor/demandes"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700"
-              >
-                <Inbox size={14} />
-                Voir les demandes
-              </Link>
-            }
-          />
 
           <div className="card border border-gray-100/80 shadow-sm">
             <div className="flex items-center justify-between mb-4">

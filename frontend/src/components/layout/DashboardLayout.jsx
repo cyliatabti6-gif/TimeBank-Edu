@@ -72,8 +72,8 @@ function topNavCenterItems(area) {
       {
         icon: Video,
         label: 'Meet',
-        path: '/tutor/planning',
-        isActive: (p) => p === '/tutor/planning' || p.startsWith('/session'),
+        path: '/tutor/meet',
+        isActive: (p) => p === '/tutor/meet' || p.startsWith('/session'),
       },
     ];
   }

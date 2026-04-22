@@ -291,6 +291,12 @@ export default function FindModule() {
                 {mod.schedule}
                 {mod.dureeLabel ? ` · ${mod.dureeLabel}` : ''}
               </p>
+              {Array.isArray(mod.recentComments) && mod.recentComments.length > 0 ? (
+                <div className="mb-3 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                  <p className="text-[11px] font-semibold text-gray-700 mb-1">Avis étudiants</p>
+                  <p className="text-xs text-gray-600 line-clamp-2">&quot;{mod.recentComments[0].comment}&quot;</p>
+                </div>
+              ) : null}
               <button type="button" onClick={() => navigate(`/modules/${mod.id}`)} className="btn-primary w-full text-sm py-2">
                 Demander
               </button>

@@ -219,12 +219,59 @@ export default function Session() {
     );
   }
 
+  const isStudentViewer = Number(currentUser?.id) === Number(reservation.studentId);
+  const isTutorViewer = viewerIsReservationTutor(currentUser, reservation);
+
+  if (reservation.status === 'completed') {
+    return (
+      <DashboardLayout>
+        <div className="max-w-lg mx-auto py-12 text-center text-gray-600 text-sm">
+          <p>Cette séance est terminée.</p>
+          {isStudentViewer && !reservation.evaluated ? (
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={() =>
+                navigate(`/evaluation/${reservation.id}`, {
+                  state: {
+                    reservationId: reservation.id,
+                    tutorName: reservation.tutorName,
+                    tutorId: reservation.tutorId,
+                    filiere: '—',
+                    score: 5,
+                    module: reservation.module,
+                    duration: reservation.duration,
+                    date: reservation.date,
+                    time: reservation.creneauLabel || '',
+                  },
+                })
+              }
+            >
+              Évaluer cette séance
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`${isStudentViewer && !reservation.evaluated ? 'btn-secondary ml-2' : 'btn-primary mt-4'}`}
+            onClick={() => navigate(isTutorViewer ? '/tutor/demandes' : '/student/demandes')}
+          >
+            Mes réservations
+          </button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (reservation.status !== 'confirmed') {
     return (
       <DashboardLayout>
         <div className="max-w-lg mx-auto py-12 text-center text-gray-600 text-sm">
           <p>Cette séance n’est pas disponible (statut : {reservation.status}).</p>
-          <button type="button" className="btn-primary mt-4" onClick={() => navigate('/student/demandes')}>
+          <button
+            type="button"
+            className="btn-primary mt-4"
+            onClick={() => navigate(isTutorViewer ? '/tutor/demandes' : '/student/demandes')}
+          >
             Mes réservations
           </button>
         </div>
@@ -246,7 +293,6 @@ export default function Session() {
 
   const online = isReservationOnline(reservation);
   const showStudentJoinButton = canStudentJoinOnlineMeeting(reservation, currentUser);
-  const isTutorViewer = viewerIsReservationTutor(currentUser, reservation);
 
   if (ended) {
     return (

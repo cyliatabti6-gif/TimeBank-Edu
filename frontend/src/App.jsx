@@ -111,6 +111,7 @@ function AppRoutes() {
       <Route path="/tutor/modules/new" element={<ProtectedRoute role="tutor"><ProposeModule /></ProtectedRoute>} />
       <Route path="/tutor/modules/edit/:id" element={<ProtectedRoute role="tutor"><EditModule /></ProtectedRoute>} />
       <Route path="/tutor/demandes" element={<ProtectedRoute role="tutor"><ReceivedRequests /></ProtectedRoute>} />
+      <Route path="/tutor/meet" element={<ProtectedRoute role="tutor"><ReceivedRequests meetOnly /></ProtectedRoute>} />
       <Route path="/tutor/planning" element={<ProtectedRoute role="tutor"><Planning /></ProtectedRoute>} />
       <Route path="/tutor/stats" element={<ProtectedRoute role="tutor"><Statistics /></ProtectedRoute>} />
       <Route path="/tutor/profil" element={<ProtectedRoute role="tutor"><TutorProfile /></ProtectedRoute>} />

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useApp } from '../../context/AppContext';
 import { getAccessToken } from '../../lib/authStorage';
@@ -69,7 +68,6 @@ function assignLanes(dayEvents) {
 }
 
 export default function Planning() {
-  const navigate = useNavigate();
   const { currentUser } = useApp();
   const [view, setView] = useState('week');
   const [weekStart, setWeekStart] = useState(() => startOfWeekMonday(new Date()));
@@ -216,13 +214,6 @@ export default function Planning() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/tutor/modules/new')}
-            className="btn-primary text-sm py-2 px-4 inline-flex items-center gap-1.5"
-          >
-            <Plus size={15} /> Proposer un module
-          </button>
         </div>
       </div>
 
